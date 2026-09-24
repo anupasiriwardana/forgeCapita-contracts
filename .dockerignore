@@ -1,0 +1,19 @@
+# Ignore AI and Git folders
+.claude
+CLAUDE.md
+.cursor
+.git
+.agents
+AGENTS.md
+
+# Ignore Node packages (Docker builds its own)
+node_modules
+npm-debug.log
+
+# Ignore environment files
+.env
+
+# Ignore Hardhat specific build folders (Only matters for the contracts folder)
+artifacts
+cache
+typechain-types
