@@ -1,43 +1,90 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-contract RevenueRouter {
-    // 1. State Variables
-    address payable public immutable creatorAddress; // The startup's wallet that receives 80% of all incoming payments
-    address payable public immutable dividendDistributor; // The Dividend Distributor contract that receives 20% of all incoming payments
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-    // 2. The Event (Your Node.js Indexer will still listen for this!)
-    event PaymentReceived(address indexed customer, uint256 amountPaid, uint256 creatorCut, uint256 investorCut);
+contract RevenueRouter is ReentrancyGuard {
+    address payable public immutable creatorAddress;
+    address payable public immutable dividendDistributor;
+    address payable public immutable forgeCapitaTreasury;
+    
+    // Internal ledgers for the "Pull" method
+    uint256 public creatorPendingFunds;
+    uint256 public treasuryPendingFunds;
+    
+    event PaymentReceived(
+        address indexed customer, 
+        uint256 amountPaid, 
+        uint256 creatorCut, 
+        uint256 investorCut, 
+        uint256 platformFee
+    );
+    
+    event FundsClaimed(address indexed claimant, uint256 amount);
 
-    // 3. Constructor (Runs once when deployed by the ForgeCapita Factory)
-    constructor(address payable _creatorAddress, address payable _dividendDistributor) {
+    constructor(
+        address payable _creatorAddress, 
+        address payable _dividendDistributor,
+        address payable _treasury
+    ) {
         creatorAddress = _creatorAddress;
         dividendDistributor = _dividendDistributor;
+        forgeCapitaTreasury = _treasury;
     }
 
-    // 4. The Core Logic: Intercepting and Splitting the Money
     function routePayment() public payable {
-        // Require that the customer actually sent some money
         require(msg.value > 0, "You must send ETH to pay.");
-
         uint256 paymentAmount = msg.value;
-
-        // Calculate the 80% cut for the creator
-        uint256 creatorCut = (paymentAmount * 80) / 100;
         
-        // Calculate the 20% cut for the investors
-        uint256 investorCut = paymentAmount - creatorCut;
+        // 1. Calculate the 1% platform fee
+        uint256 platformFee = (paymentAmount * 1) / 100;
+        
+        // 2. Calculate the 39% developer cut
+        uint256 creatorCut = (paymentAmount * 39) / 100;
+        
+        // 3. The remainder (60%) goes to investors
+        uint256 investorCut = paymentAmount - creatorCut - platformFee;
 
-        // Instantly push the 80% to the Creator's wallet
-        (bool successCreator, ) = creatorAddress.call{value: creatorCut}("");
-        require(successCreator, "Transfer to creator failed!");
+        // PULL METHOD: Update internal ledgers for external/untrusted addresses
+        creatorPendingFunds += creatorCut;
+        treasuryPendingFunds += platformFee;
 
-        // Instantly push the 20% directly into the Dividend Distributor contract
-        // This automatically triggers the `receive() external payable` function inside the Distributor!
+        // PUSH METHOD: Send instantly to the trusted DividendDistributor
+        // (This triggers the passive yield for investors without risking a DoS)
         (bool successDistributor, ) = dividendDistributor.call{value: investorCut}("");
         require(successDistributor, "Transfer to distributor failed!");
 
-        // Broadcast the event to the blockchain
-        emit PaymentReceived(msg.sender, paymentAmount, creatorCut, investorCut);
+        emit PaymentReceived(msg.sender, paymentAmount, creatorCut, investorCut, platformFee);
+    }
+    
+    /**
+     * @dev Allows the developer to pull their accumulated SaaS revenue.
+     */
+    function claimCreatorFunds() external nonReentrant {
+        uint256 amount = creatorPendingFunds;
+        require(amount > 0, "No funds to claim");
+        
+        // Reset ledger before transfer to prevent reentrancy attacks
+        creatorPendingFunds = 0;
+        
+        (bool success, ) = creatorAddress.call{value: amount}("");
+        require(success, "ETH transfer failed");
+        
+        emit FundsClaimed(creatorAddress, amount);
+    }
+    
+    /**
+     * @dev Allows the forgeCapita platform to pull its accumulated fees.
+     */
+    function claimTreasuryFunds() external nonReentrant {
+        uint256 amount = treasuryPendingFunds;
+        require(amount > 0, "No funds to claim");
+        
+        treasuryPendingFunds = 0;
+        
+        (bool success, ) = forgeCapitaTreasury.call{value: amount}("");
+        require(success, "ETH transfer failed");
+        
+        emit FundsClaimed(forgeCapitaTreasury, amount);
     }
 }

@@ -12,6 +12,7 @@ export default defineConfig({
             enabled: true,
             runs: 20, // Lower runs heavily compresses the Factory bytecode
           },
+          viaIR: true,
         },
       },
       production: {
@@ -21,6 +22,7 @@ export default defineConfig({
             enabled: true,
             runs: 200,
           },
+          viaIR: true,
         },
       },
     },
