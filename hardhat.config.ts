@@ -10,7 +10,7 @@ export default defineConfig({
         settings: {
           optimizer: {
             enabled: true,
-            runs: 20, // Lower runs heavily compresses the Factory bytecode
+            runs: 200, //Lower 'runs' optimizes for deployment size over execution cost
           },
           viaIR: true,
         },

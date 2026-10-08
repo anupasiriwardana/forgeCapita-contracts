@@ -5,10 +5,11 @@ import "./ProjectToken.sol";
 import "./MilestoneEscrow.sol";
 import "./DividendDistributor.sol";
 import "./RevenueRouter.sol";
+import "./P2PExchange.sol";
 
 contract ForgeCapitaFactory {
-    
     address payable public immutable forgeCapitaTreasury;
+    P2PExchange public immutable p2pExchange;
 
     event ProjectLaunched(
         address indexed developer,
@@ -21,9 +22,9 @@ contract ForgeCapitaFactory {
     mapping(address => address[]) public developerProjects;
     address[] public allProjects;
 
-    // Factory is initialized with the platform's treasury wallet
     constructor(address payable _treasury) {
         forgeCapitaTreasury = _treasury;
+        p2pExchange = new P2PExchange(_treasury);
     }
 
     function launchProject(
@@ -47,25 +48,24 @@ contract ForgeCapitaFactory {
             _milestonePercentages,
             _fundingGoal,
             _fundingDurationDays,
-            forgeCapitaTreasury // Pass treasury down
+            forgeCapitaTreasury
         );
         
+        // Transfer 100% of supply to Escrow for internal public/developer partitioning
         token.transfer(address(escrow), scaledSupply);
         
         DividendDistributor distributor = new DividendDistributor(address(token));
         
         RevenueRouter router = new RevenueRouter(
-            payable(msg.sender), 
+            address(escrow), 
             payable(address(distributor)),
-            forgeCapitaTreasury // Pass treasury down
+            forgeCapitaTreasury
         );
         
         developerProjects[msg.sender].push(address(token));
         allProjects.push(address(token));
         
-        emit ProjectLaunched(
-            msg.sender, address(token), address(escrow), address(distributor), address(router)
-        );
+        emit ProjectLaunched(msg.sender, address(token), address(escrow), address(distributor), address(router));
         
         return (address(token), address(escrow), address(distributor), address(router));
     }

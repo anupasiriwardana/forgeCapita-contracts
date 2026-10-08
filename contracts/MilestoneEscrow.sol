@@ -4,14 +4,22 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+// Interface needed to call OpenZeppelin's snapshot function
+interface IVotes {
+    function getPastVotes(address account, uint256 timepoint) external view returns (uint256);
+}
+
 contract MilestoneEscrow is ReentrancyGuard {
     IERC20 public immutable projectToken;
-    address payable public immutable developer;
+    address payable public developer;
+    address payable public pendingDeveloper; // For developer replacement
     address payable public immutable forgeCapitaTreasury;
     
-    uint256 public immutable totalSupply; 
-    uint256 public totalRaised; // Gross amount for token math
-    uint256 public netFunds;    // Amount left for developer after 5% fee
+    uint256 public immutable publicSupply; 
+    uint256 public immutable developerSupply;
+    uint256 public remainingPublicTokens;
+    uint256 public totalRaised; 
+    uint256 public netFunds;    
     
     bool public isFundingActive = true;
     bool public projectCancelled = false; 
@@ -20,8 +28,10 @@ contract MilestoneEscrow is ReentrancyGuard {
     uint256 public immutable fundingDeadline;
     
     uint256 public milestoneDeadline;
-    uint256 public constant MAX_INACTIVITY_PERIOD = 90 days;
+    uint256 public constant MAX_INACTIVITY_PERIOD = 120 days;
     uint256 public constant PLATFORM_FEE_PERCENT = 5;
+    uint256 public constant VOTING_PERIOD = 28 days;
+    uint256 public constant QUORUM_PERCENT = 20;
 
     struct Milestone {
         string description;
@@ -30,6 +40,8 @@ contract MilestoneEscrow is ReentrancyGuard {
         bool isExecuted;
         uint256 yesVotes;
         uint256 noVotes;
+        uint256 votingStartTime; 
+        uint256 votingStartBlock; // Added to anchor the voting snapshot
     }
     
     Milestone[] public milestones;
@@ -42,15 +54,17 @@ contract MilestoneEscrow is ReentrancyGuard {
     event DepositReceived(address indexed backer, uint256 amount);
     event VotingStarted(uint256 indexed milestoneIndex);
     event Voted(address indexed voter, uint256 indexed milestoneIndex, bool support, uint256 weight);
-    event MilestoneExecuted(uint256 indexed milestoneIndex, uint256 amountReleased);
+    event MilestoneExecuted(uint256 indexed milestoneIndex, uint256 amountReleased, uint256 tokensVested);
     event ProjectCancelled(string reason);
     event RefundClaimed(address indexed backer, uint256 amount);
     event PlatformFeeCollected(uint256 amount);
+    event DeveloperTransferProposed(address indexed oldDeveloper, address indexed newDeveloper);
+    event DeveloperTransferAccepted(address indexed oldDeveloper, address indexed newDeveloper);
 
     constructor(
         address _projectToken, 
         address payable _developer, 
-        uint256 _totalSupply,
+        uint256 _totalTokenSupply,
         string[] memory _milestoneDescriptions,
         uint256[] memory _milestonePercentages,
         uint256 _fundingGoal,
@@ -59,9 +73,12 @@ contract MilestoneEscrow is ReentrancyGuard {
     ) {
         projectToken = IERC20(_projectToken);
         developer = _developer;
-        totalSupply = _totalSupply;
-        forgeCapitaTreasury = _treasury;
         
+        developerSupply = (_totalTokenSupply * 20) / 100;
+        publicSupply = _totalTokenSupply - developerSupply;
+        remainingPublicTokens = publicSupply;
+        
+        forgeCapitaTreasury = _treasury;
         fundingGoal = _fundingGoal;
         fundingDeadline = block.timestamp + (_fundingDurationDays * 1 days);
         
@@ -78,7 +95,9 @@ contract MilestoneEscrow is ReentrancyGuard {
                 isVotingOpen: false,
                 isExecuted: false,
                 yesVotes: 0,
-                noVotes: 0
+                noVotes: 0,
+                votingStartTime: 0,
+                votingStartBlock: 0
             }));
         }
         require(totalPercentage == 100, "Milestone percentages must equal exactly 100");
@@ -87,32 +106,51 @@ contract MilestoneEscrow is ReentrancyGuard {
     receive() external payable {
         require(isFundingActive, "Funding phase is over");
         require(block.timestamp <= fundingDeadline, "Funding deadline has passed");
+        require(msg.sender != developer, "Developer cannot fund campaign");
         
         deposits[msg.sender] += msg.value;
         emit DepositReceived(msg.sender, msg.value);
     }
 
+    // 1. Remove the Milestone 0 activation from closeFundingAndStart()
     function closeFundingAndStart() external {
         require(msg.sender == developer, "Only developer can call");
         require(isFundingActive, "Already closed");
         require(address(this).balance >= fundingGoal, "Funding goal not reached");
         
         isFundingActive = false;
-        
-        // 1. Calculate the 5% platform success fee
         totalRaised = address(this).balance; 
         uint256 fee = (totalRaised * PLATFORM_FEE_PERCENT) / 100;
         netFunds = totalRaised - fee; 
         
-        // 2. Transfer the fee to ForgeCapita
         (bool feeSuccess, ) = forgeCapitaTreasury.call{value: fee}("");
         require(feeSuccess, "Fee transfer failed");
         emit PlatformFeeCollected(fee);
+        
+        // DO NOT start Milestone 0 here.
+    }
 
-        // 3. Open Milestone 0
-        milestones[0].isVotingOpen = true;
-        milestoneDeadline = block.timestamp + MAX_INACTIVITY_PERIOD;
-        emit VotingStarted(0);
+    // 2. Combine the milestone triggers into one universal function
+    function startMilestone(uint256 index) external {
+        require(msg.sender == developer, "Only developer can request");
+        require(!isFundingActive, "Funding still active");
+        require(!projectCancelled, "Project cancelled");
+        require(index == currentMilestoneIndex, "Invalid milestone index");
+        require(!milestones[index].isVotingOpen, "Milestone already open");
+        
+        if (index > 0) {
+            require(milestones[index - 1].isExecuted, "Previous milestone not executed");
+        }
+        
+        milestones[index].isVotingOpen = true;
+        milestones[index].votingStartTime = block.timestamp;
+        milestones[index].votingStartBlock = block.number; // Snapshot taken NOW
+        
+        if (index == 0) {
+             milestoneDeadline = block.timestamp + MAX_INACTIVITY_PERIOD;
+        }
+        
+        emit VotingStarted(index);
     }
 
     function claimTokens() external nonReentrant {
@@ -122,21 +160,25 @@ contract MilestoneEscrow is ReentrancyGuard {
         
         hasClaimedTokens[msg.sender] = true;
         
-        // Math uses gross totalRaised so investors still get 100% of the token supply
-        uint256 tokenShare = (deposits[msg.sender] * totalSupply) / totalRaised;
+        uint256 tokenShare = (deposits[msg.sender] * publicSupply) / totalRaised;
         require(projectToken.transfer(msg.sender, tokenShare), "Token transfer failed");
     }
 
     function vote(bool support) external nonReentrant {
         require(!isFundingActive, "Funding is still active");
         require(!projectCancelled, "Project has been cancelled");
+        require(msg.sender != developer, "Developer cannot vote");
         
         Milestone storage milestone = milestones[currentMilestoneIndex];
         require(milestone.isVotingOpen, "Voting is not open");
         require(!hasVoted[currentMilestoneIndex][msg.sender], "Already voted");
         
-        uint256 voterWeight = projectToken.balanceOf(msg.sender);
-        require(voterWeight > 0, "No voting power (claim tokens first)");
+        // Prevent same-block flash loans by enforcing a 1 block delay to read past votes
+        require(block.number > milestone.votingStartBlock, "Must wait 1 block to vote");
+        
+        // Query historical snapshot instead of live balance
+        uint256 voterWeight = IVotes(address(projectToken)).getPastVotes(msg.sender, milestone.votingStartBlock);
+        require(voterWeight > 0, "No voting power (ensure you claimed and delegated)");
         
         hasVoted[currentMilestoneIndex][msg.sender] = true;
         if (support) milestone.yesVotes += voterWeight;
@@ -151,22 +193,36 @@ contract MilestoneEscrow is ReentrancyGuard {
         
         Milestone storage milestone = milestones[currentMilestoneIndex];
         require(milestone.isVotingOpen, "Voting is not open");
-        require(milestone.yesVotes > (totalSupply / 2), "Not enough Yes votes");
+
+        bool fastTrackPassed = milestone.yesVotes > (publicSupply / 2);
+        bool quorumPassed = (block.timestamp >= milestone.votingStartTime + VOTING_PERIOD) &&
+            ((milestone.yesVotes + milestone.noVotes) >= (publicSupply * QUORUM_PERCENT) / 100) &&
+            (milestone.yesVotes > milestone.noVotes);
+
+        require(fastTrackPassed || quorumPassed, "Milestone approval conditions not met");
         
         milestone.isExecuted = true;
         milestone.isVotingOpen = false;
         
-        // Developer payouts are based strictly on the netFunds remaining after the platform fee
-        uint256 amountToRelease = (netFunds * milestone.unlockPercentage) / 100;
+        uint256 ethToRelease = (netFunds * milestone.unlockPercentage) / 100;
+        bool isFinalMilestone = (currentMilestoneIndex == milestones.length - 1);
+        
         currentMilestoneIndex++;
         
         if (currentMilestoneIndex < milestones.length) {
             milestoneDeadline = block.timestamp + MAX_INACTIVITY_PERIOD;
         }
 
-        (bool success, ) = developer.call{value: amountToRelease}("");
+        uint256 tokensVested = 0;
+        if (isFinalMilestone) {
+            tokensVested = developerSupply;
+            require(projectToken.transfer(developer, tokensVested), "Token vesting transfer failed");
+        }
+
+        (bool success, ) = developer.call{value: ethToRelease}("");
         require(success, "ETH transfer failed");
-        emit MilestoneExecuted(currentMilestoneIndex - 1, amountToRelease);
+        
+        emit MilestoneExecuted(currentMilestoneIndex - 1, ethToRelease, tokensVested);
     }
 
     function requestNextMilestone() external {
@@ -176,6 +232,8 @@ contract MilestoneEscrow is ReentrancyGuard {
         require(milestones[currentMilestoneIndex - 1].isExecuted, "Previous milestone not executed");
         
         milestones[currentMilestoneIndex].isVotingOpen = true;
+        milestones[currentMilestoneIndex].votingStartTime = block.timestamp;
+        milestones[currentMilestoneIndex].votingStartBlock = block.number; // Anchor snapshot
         emit VotingStarted(currentMilestoneIndex);
     }
 
@@ -188,7 +246,6 @@ contract MilestoneEscrow is ReentrancyGuard {
         require(invested > 0, "No funds to refund");
 
         deposits[msg.sender] = 0; 
-
         (bool success, ) = msg.sender.call{value: invested}("");
         require(success, "Refund failed");
     }
@@ -204,12 +261,13 @@ contract MilestoneEscrow is ReentrancyGuard {
     function refundDeadProject() external nonReentrant {
         require(!isFundingActive, "Crowdfunding still active");
         require(projectCancelled || block.timestamp > milestoneDeadline, "Project is still healthy");
+        require(msg.sender != developer, "Developer cannot claim refund");
         
         uint256 userTokens = projectToken.balanceOf(msg.sender);
         require(userTokens > 0, "No tokens to refund. Did you call claimTokens()?");
 
-        uint256 activeTokens = totalSupply - projectToken.balanceOf(address(this));
-        uint256 refundAmount = (userTokens * address(this).balance) / activeTokens;
+        uint256 refundAmount = (userTokens * address(this).balance) / remainingPublicTokens;
+        remainingPublicTokens -= userTokens;
 
         require(projectToken.transferFrom(msg.sender, address(this), userTokens), "Token surrender failed");
 
@@ -217,5 +275,26 @@ contract MilestoneEscrow is ReentrancyGuard {
         require(success, "Refund failed");
         
         emit RefundClaimed(msg.sender, refundAmount);
+    }
+
+    // Developer replacement functions
+    // Step 1: Current developer initiates the transfer
+    function proposeNewDeveloper(address payable _newDeveloper) external {
+        require(msg.sender == developer, "Only active developer can propose");
+        require(_newDeveloper != address(0), "Cannot transfer to zero address");
+        
+        pendingDeveloper = _newDeveloper;
+        emit DeveloperTransferProposed(developer, _newDeveloper);
+    }
+
+    // Step 2: New developer accepts the role
+    function acceptDeveloperRole() external {
+        require(msg.sender == pendingDeveloper, "Only pending developer can accept");
+        
+        address oldDeveloper = developer;
+        developer = pendingDeveloper;
+        pendingDeveloper = payable(address(0)); // Lock the pending slot
+        
+        emit DeveloperTransferAccepted(oldDeveloper, developer);
     }
 }
