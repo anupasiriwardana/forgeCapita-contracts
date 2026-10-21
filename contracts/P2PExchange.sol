@@ -19,19 +19,41 @@ contract P2PExchange is ReentrancyGuard {
     uint256 public nextListingId;
     mapping(uint256 => Listing) public listings;
 
-    event ListingCreated(uint256 indexed listingId, address indexed seller, address indexed token, uint256 amount, uint256 price);
-    event ListingFilled(uint256 indexed listingId, address indexed buyer, address indexed seller, uint256 price);
+    event ListingCreated(
+        uint256 indexed listingId,
+        address indexed seller,
+        address indexed token,
+        uint256 amount,
+        uint256 price
+    );
+    event ListingFilled(
+        uint256 indexed listingId,
+        address indexed buyer,
+        address indexed seller,
+        uint256 price
+    );
     event ListingCancelled(uint256 indexed listingId, address indexed seller);
 
     constructor(address payable _treasury) {
         treasury = _treasury;
     }
 
-    function createListing(address tokenAddress, uint256 tokenAmount, uint256 priceInETH) external nonReentrant returns (uint256) {
+    function createListing(
+        address tokenAddress,
+        uint256 tokenAmount,
+        uint256 priceInETH
+    ) external nonReentrant returns (uint256) {
         require(tokenAmount > 0, "Amount must be > 0");
         require(priceInETH > 0, "Price must be > 0");
 
-        require(IERC20(tokenAddress).transferFrom(msg.sender, address(this), tokenAmount), "Token transfer failed");
+        require(
+            IERC20(tokenAddress).transferFrom(
+                msg.sender,
+                address(this),
+                tokenAmount
+            ),
+            "Token transfer failed"
+        );
 
         uint256 listingId = nextListingId++;
         listings[listingId] = Listing({
@@ -42,7 +64,13 @@ contract P2PExchange is ReentrancyGuard {
             active: true
         });
 
-        emit ListingCreated(listingId, msg.sender, tokenAddress, tokenAmount, priceInETH);
+        emit ListingCreated(
+            listingId,
+            msg.sender,
+            tokenAddress,
+            tokenAmount,
+            priceInETH
+        );
         return listingId;
     }
 
@@ -59,10 +87,15 @@ contract P2PExchange is ReentrancyGuard {
         (bool feeSuccess, ) = treasury.call{value: fee}("");
         require(feeSuccess, "Treasury transfer failed");
 
-        (bool sellerSuccess, ) = payable(item.seller).call{value: sellerProceeds}("");
+        (bool sellerSuccess, ) = payable(item.seller).call{
+            value: sellerProceeds
+        }("");
         require(sellerSuccess, "Seller transfer failed");
 
-        require(IERC20(item.tokenAddress).transfer(msg.sender, item.tokenAmount), "Token transfer to buyer failed");
+        require(
+            IERC20(item.tokenAddress).transfer(msg.sender, item.tokenAmount),
+            "Token transfer to buyer failed"
+        );
 
         emit ListingFilled(listingId, msg.sender, item.seller, msg.value);
     }
@@ -73,7 +106,10 @@ contract P2PExchange is ReentrancyGuard {
         require(item.seller == msg.sender, "Only seller can cancel");
 
         item.active = false;
-        require(IERC20(item.tokenAddress).transfer(msg.sender, item.tokenAmount), "Token return failed");
+        require(
+            IERC20(item.tokenAddress).transfer(msg.sender, item.tokenAmount),
+            "Token return failed"
+        );
 
         emit ListingCancelled(listingId, msg.sender);
     }

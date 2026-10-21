@@ -3,18 +3,20 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "./interfaces/IMilestoneEscrow.sol";
 
 /**
  * @title DividendDistributor
- * @dev Distributes ETH yield proportionally to investors who stake their ForgeCapita Project Tokens.
+ * @dev Distributes ETH yield and secures staked-governance voting weight.
  */
 contract DividendDistributor is ReentrancyGuard {
-    IERC20 public immutable projectToken; // The ERC-20 token representing fractional equity or yield claims for the startup
-    
-    uint256 public totalStaked; // The total amount of Project Tokens currently staked in the contract
-    uint256 public dividendPerToken; // The high-water mark of ETH yield per staked token, scaled by MAGNIFIER to avoid precision loss
-    
-    // Used to prevent precision loss when dividing small amounts of ETH by large token supplies
+    IERC20 public immutable projectToken;
+    address public immutable factory;
+    address public milestoneEscrow;
+
+    uint256 public totalStaked;
+    uint256 public dividendPerToken;
+
     uint256 private constant MAGNIFIER = 1e18;
 
     mapping(address => uint256) public stakedBalance;
@@ -25,82 +27,97 @@ contract DividendDistributor is ReentrancyGuard {
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
     event YieldClaimed(address indexed user, uint256 amount);
+    event EscrowLinked(address indexed escrow);
 
     constructor(address _projectToken) {
         projectToken = IERC20(_projectToken);
+        factory = msg.sender;
     }
 
     /**
-     * @dev The RevenueRouter sends the 20% SaaS yield directly here.
-     * The yield is instantly distributed proportionally across all currently staked tokens.
+     * @dev One-time initialization called by Factory during deployment.
      */
+    function setMilestoneEscrow(address _milestoneEscrow) external {
+        require(msg.sender == factory, "Only factory can link escrow");
+        require(milestoneEscrow == address(0), "Escrow already linked");
+        require(_milestoneEscrow != address(0), "Invalid escrow address");
+        milestoneEscrow = _milestoneEscrow;
+        emit EscrowLinked(_milestoneEscrow);
+    }
+
     receive() external payable {
         require(totalStaked > 0, "No tokens staked to receive dividends");
-        
-        // Increases the global reward rate based on the incoming ETH
         dividendPerToken += (msg.value * MAGNIFIER) / totalStaked;
-        
         emit DividendsDeposited(msg.value);
     }
 
-    /**
-     * @dev Modifier that calculates and locks in a user's pending yield 
-     * before their balance changes (staking/withdrawing/claiming).
-     */
     modifier updateDividend(address account) {
         rewards[account] = getClaimableYield(account);
         userDividendPerTokenPaid[account] = dividendPerToken;
         _;
     }
 
-    /**
-     * @dev Calculates the exact amount of ETH a user is currently owed.
-     */
     function getClaimableYield(address account) public view returns (uint256) {
-        return (stakedBalance[account] * (dividendPerToken - userDividendPerTokenPaid[account])) / MAGNIFIER + rewards[account];
+        return
+            (stakedBalance[account] *
+                (dividendPerToken - userDividendPerTokenPaid[account])) /
+            MAGNIFIER +
+            rewards[account];
     }
 
-    /**
-     * @dev Investors deposit their Project Tokens to start earning yield.
-     */
-    function stake(uint256 amount) external nonReentrant updateDividend(msg.sender) {
+    function stake(
+        uint256 amount
+    ) external nonReentrant updateDividend(msg.sender) {
         require(amount > 0, "Cannot stake 0");
-        
+
         totalStaked += amount;
         stakedBalance[msg.sender] += amount;
-        
-        require(projectToken.transferFrom(msg.sender, address(this), amount), "Token transfer failed");
-        
+
+        require(
+            projectToken.transferFrom(msg.sender, address(this), amount),
+            "Token transfer failed"
+        );
         emit Staked(msg.sender, amount);
     }
 
     /**
-     * @dev Investors withdraw their Project Tokens, pausing their yield generation.
+     * @dev Unstaking is blocked while the user has an active vote on an ongoing milestone.
      */
-    function withdraw(uint256 amount) external nonReentrant updateDividend(msg.sender) {
+    function withdraw(
+        uint256 amount
+    ) external nonReentrant updateDividend(msg.sender) {
         require(amount > 0, "Cannot withdraw 0");
-        require(stakedBalance[msg.sender] >= amount, "Insufficient staked balance");
-        
+        require(
+            stakedBalance[msg.sender] >= amount,
+            "Insufficient staked balance"
+        );
+
+        if (milestoneEscrow != address(0)) {
+            require(
+                !IMilestoneEscrow(milestoneEscrow).isUserVoteLocked(msg.sender),
+                "Tokens locked in active milestone vote"
+            );
+        }
+
         totalStaked -= amount;
         stakedBalance[msg.sender] -= amount;
-        
-        require(projectToken.transfer(msg.sender, amount), "Token transfer failed");
-        
+
+        require(
+            projectToken.transfer(msg.sender, amount),
+            "Token transfer failed"
+        );
         emit Withdrawn(msg.sender, amount);
     }
 
-    /**
-     * @dev Investors claim their accumulated ETH yield straight to their wallets.
-     */
     function claimYield() external nonReentrant updateDividend(msg.sender) {
         uint256 reward = rewards[msg.sender];
         require(reward > 0, "No yield available");
-        
+
         rewards[msg.sender] = 0;
-        
+
         (bool success, ) = msg.sender.call{value: reward}("");
         require(success, "ETH transfer failed");
-        
+
         emit YieldClaimed(msg.sender, reward);
     }
 }

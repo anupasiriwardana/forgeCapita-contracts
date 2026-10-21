@@ -2,53 +2,28 @@ import { network } from "hardhat";
 
 async function main() {
   const { ethers } = await network.create();
-  const [developer, investor1, investor2, treasury] = await ethers.getSigners();
+  const [dev, inv, treasury] = await ethers.getSigners();
 
-  console.log("🚀 1. Deploying Factory & Launching Project...");
+  console.log("🚀 SCENARIO 9: FAILED CROWDFUND (SOFT-CAP MISSED)");
   const Factory = await ethers.getContractFactory("ForgeCapitaFactory");
   const factory = await Factory.deploy(treasury.address);
-  await factory.waitForDeployment();
-  
-  const tx = await factory.connect(developer).launchProject(
-      "forgeCapita Equity", "FGC", 1000000n, ["MVP Build"], [100], ethers.parseEther("10"), 30
-  );
+
+  const tx = await factory.connect(dev).launchProject("SaaS", "SAS", 1000000n, ["M0"], [100n], ethers.parseEther("10"), 30n);
   const receipt = await tx.wait();
-  const events = await factory.queryFilter(factory.filters.ProjectLaunched(), receipt?.blockNumber, receipt?.blockNumber);
-  const event = events[0] as any; 
-  const escrowAddress = event.args[2];
-  const escrow = await ethers.getContractAt("MilestoneEscrow", escrowAddress);
+  const event = (await factory.queryFilter(factory.filters.ProjectLaunched(), receipt?.blockNumber))[0] as any;
+  const escrow = await ethers.getContractAt("MilestoneEscrow", event.args.milestoneEscrow);
 
-  console.log("💰 2. FUNDING SUCCESS & CLOSING");
-  await investor1.sendTransaction({ to: escrowAddress, value: ethers.parseEther("6") });
-  await investor2.sendTransaction({ to: escrowAddress, value: ethers.parseEther("4") });
-  await escrow.connect(developer).closeFundingAndStart();
+  console.log("\n💰 Investor funds 4 ETH (Goal is 10 ETH)...");
+  await inv.sendTransaction({ to: escrow.target, value: ethers.parseEther("4") });
 
-  console.log("\n🚨 3. EXPLOIT ATTEMPT: DOUBLE TOKEN CLAIM");
-  await escrow.connect(investor1).claimTokens();
-  console.log("   ✅ First claim successful.");
-  
-  try {
-    await escrow.connect(investor1).claimTokens();
-    console.log("   ❌ ERROR: Second claim succeeded when it should have failed!");
-  } catch (error: any) {
-    console.log("   🛡️  Contract Protected! Revert Reason: " + 
-      (error.message.includes("Tokens already claimed") ? '"Tokens already claimed"' : error.message));
-  }
+  console.log("⏳ Fast-forwarding 31 days (Deadline passed)...");
+  await ethers.provider.send("evm_increaseTime", [31 * 24 * 60 * 60]);
+  await ethers.provider.send("evm_mine", []);
 
-  console.log("\n🚨 4. EXPLOIT ATTEMPT: DOUBLE VOTING");
-  await escrow.connect(investor1).vote(true);
-  console.log("   ✅ First vote successful.");
-  
-  try {
-    await escrow.connect(investor1).vote(true);
-    console.log("   ❌ ERROR: Second vote succeeded when it should have failed!");
-  } catch (error: any) {
-    console.log("   🛡️  Contract Protected! Revert Reason: " + 
-      (error.message.includes("Already voted") ? '"Already voted"' : error.message));
-  }
+  const balBefore = await ethers.provider.getBalance(inv.address);
+  await escrow.connect(inv).refundFailedCrowdfund();
+  const balAfter = await ethers.provider.getBalance(inv.address);
+
+  console.log(`   - Refund Received ~ ${ethers.formatEther(balAfter - balBefore).substring(0, 4)} ETH (Expected: 4.0)`);
 }
-
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main().catch(console.error);

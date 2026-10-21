@@ -2,56 +2,47 @@ import { network } from "hardhat";
 
 async function main() {
   const { ethers } = await network.create();
-  const [developer, investor1, investor2, treasury] = await ethers.getSigners();
+  const [dev, inv1, inv2, treasury] = await ethers.getSigners();
 
-  console.log("🚀 1. Deploying Factory & Launching Project...");
+  console.log("🚀 SCENARIO 8: 28-DAY QUORUM FALLBACK EXECUTION");
   const Factory = await ethers.getContractFactory("ForgeCapitaFactory");
   const factory = await Factory.deploy(treasury.address);
-  await factory.waitForDeployment();
-  
-  const tx = await factory.connect(developer).launchProject(
-      "forgeCapita Equity", "FGC", 1000000n, ["MVP Build"], [100], ethers.parseEther("10"), 30
-  );
+  const tx = await factory.connect(dev).launchProject("SaaS", "SAS", 1000000n, ["M0"], [100n], ethers.parseEther("10"), 30n);
   const receipt = await tx.wait();
-  const events = await factory.queryFilter(factory.filters.ProjectLaunched(), receipt?.blockNumber, receipt?.blockNumber);
-  const event = events[0] as any; 
-  
-  const escrowAddress = event.args[2];
-  const escrow = await ethers.getContractAt("MilestoneEscrow", escrowAddress);
+  const event = (await factory.queryFilter(factory.filters.ProjectLaunched(), receipt?.blockNumber))[0] as any;
+  const token = await ethers.getContractAt("ProjectToken", event.args.projectToken);
+  const escrow = await ethers.getContractAt("MilestoneEscrow", event.args.milestoneEscrow);
+  const distributor = await ethers.getContractAt("DividendDistributor", event.args.dividendDistributor);
 
-  console.log("💰 2. FUNDING SUCCESS & CLAIMING TOKENS");
-  await investor1.sendTransaction({ to: escrowAddress, value: ethers.parseEther("6") }); // 60% Power
-  await investor2.sendTransaction({ to: escrowAddress, value: ethers.parseEther("4") }); // 40% Power
-  
-  await escrow.connect(developer).closeFundingAndStart();
-  await escrow.connect(investor1).claimTokens();
-  await escrow.connect(investor2).claimTokens();
+  // Inv1 has 30%, Inv2 has 70%.
+  await inv1.sendTransaction({ to: escrow.target, value: ethers.parseEther("3") });
+  await inv2.sendTransaction({ to: escrow.target, value: ethers.parseEther("7") });
+  await escrow.connect(dev).closeFundingAndStart();
+  await escrow.connect(inv1).claimTokens();
+  await token.connect(inv1).approve(distributor.target, ethers.parseEther("240000"));
+  await distributor.connect(inv1).stake(ethers.parseEther("240000")); // Staked 30% of public supply
 
-  console.log("\n🗳️ 3. MINORITY VOTE CAST");
-  // Investor 2 (who only has 40% voting power) votes Yes.
-  await escrow.connect(investor2).vote(true);
-  
-  const milestone = await escrow.milestones(0);
-  console.log(`   Current Yes Votes: ${ethers.formatEther(milestone.yesVotes)} FGC / 1,000,000 FGC`);
-  console.log(`   Required Threshold: > 500,000 FGC`);
+  console.log("\n🗳️ Inv 1 votes YES (30% of total public supply). Inv 2 abstains.");
+  await escrow.connect(dev).startMilestone(0);
+  await escrow.connect(inv1).vote(true);
 
-  console.log("\n🚨 4. DEVELOPER ATTEMPTS TO EXECUTE MILESTONE");
+  console.log("⚡ Attempting execution immediately (Should Fail)...");
   try {
-    // Developer attempts to bypass the vote and execute
-    await escrow.connect(developer).executeMilestone();
-    console.log("   ❌ ERROR: Transaction succeeded when it should have failed!");
-  } catch (error: any) {
-    console.log("   ✅ Transaction correctly reverted!");
-    // Extract the exact revert reason from the EVM error
-    if (error.message.includes("Not enough Yes votes")) {
-      console.log(`   EVM Revert Reason: "Not enough Yes votes"`);
-    } else {
-      console.log(error.message);
-    }
+    await escrow.connect(dev).executeMilestone();
+    console.log("❌ ERROR: Milestone executed prematurely!");
+  } catch (e: any) {
+    console.log(`   ✅ Execution Reverted properly: ${e.message.includes("conditions not met")}`);
   }
-}
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+  console.log("\n⏳ Fast-forwarding 29 days...");
+  await ethers.provider.send("evm_increaseTime", [29 * 24 * 60 * 60]);
+  await ethers.provider.send("evm_mine", []);
+
+  console.log("⚡ Attempting execution again...");
+  await escrow.connect(dev).executeMilestone();
+
+  const devBal = await ethers.provider.getBalance(dev.address);
+  console.log(`   ✅ Milestone Executed via Quorum! Dev balance updated.`);
+  console.log(`   Developer Balance: ${ethers.formatEther(devBal)} ETH`);
+}
+main().catch(console.error);

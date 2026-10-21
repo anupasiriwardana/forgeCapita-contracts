@@ -36,38 +36,55 @@ contract ForgeCapitaFactory {
         uint256 _fundingGoal,
         uint256 _fundingDurationDays
     ) external returns (address, address, address, address) {
-        
-        ProjectToken token = new ProjectToken(_name, _symbol, _totalSupply, address(this));
+        ProjectToken token = new ProjectToken(
+            _name,
+            _symbol,
+            _totalSupply,
+            address(this)
+        );
         uint256 scaledSupply = _totalSupply * 10 ** token.decimals();
-        
+
+        DividendDistributor distributor = new DividendDistributor(
+            address(token)
+        );
+
         MilestoneEscrow escrow = new MilestoneEscrow(
-            address(token), 
-            payable(msg.sender), 
-            scaledSupply, 
-            _milestoneDescriptions, 
+            address(token),
+            payable(msg.sender),
+            scaledSupply,
+            _milestoneDescriptions,
             _milestonePercentages,
             _fundingGoal,
             _fundingDurationDays,
-            forgeCapitaTreasury
+            forgeCapitaTreasury,
+            address(distributor)
         );
-        
-        // Transfer 100% of supply to Escrow for internal public/developer partitioning
+
+        distributor.setMilestoneEscrow(address(escrow));
         token.transfer(address(escrow), scaledSupply);
-        
-        DividendDistributor distributor = new DividendDistributor(address(token));
-        
+
         RevenueRouter router = new RevenueRouter(
-            address(escrow), 
+            address(escrow),
             payable(address(distributor)),
             forgeCapitaTreasury
         );
-        
+
         developerProjects[msg.sender].push(address(token));
         allProjects.push(address(token));
-        
-        emit ProjectLaunched(msg.sender, address(token), address(escrow), address(distributor), address(router));
-        
-        return (address(token), address(escrow), address(distributor), address(router));
+
+        emit ProjectLaunched(
+            msg.sender,
+            address(token),
+            address(escrow),
+            address(distributor),
+            address(router)
+        );
+        return (
+            address(token),
+            address(escrow),
+            address(distributor),
+            address(router)
+        );
     }
 
     function getTotalProjects() external view returns (uint256) {

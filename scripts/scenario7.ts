@@ -2,72 +2,41 @@ import { network } from "hardhat";
 
 async function main() {
   const { ethers } = await network.create();
-  const [developer, investor1, investor2, treasury] = await ethers.getSigners();
+  const [dev, seller, buyer, treasury] = await ethers.getSigners();
 
-  console.log("🚀 1. Deploying Factory & Launching Project...");
+  console.log("🚀 SCENARIO 7: P2P SECONDARY MARKET SWAP");
   const Factory = await ethers.getContractFactory("ForgeCapitaFactory");
   const factory = await Factory.deploy(treasury.address);
-  await factory.waitForDeployment();
-  
-  // Launching a 3-stage project (40 / 30 / 30)
-  const tx = await factory.connect(developer).launchProject(
-      "forgeCapita Equity", "FGC", 1000000n, ["Design", "Beta", "Mainnet"], [40, 30, 30], ethers.parseEther("10"), 30
-  );
+  const p2p = await ethers.getContractAt("P2PExchange", await factory.p2pExchange());
+
+  const tx = await factory.connect(dev).launchProject("SaaS", "SAS", 1000000n, ["M0"], [100n], ethers.parseEther("1"), 30n);
   const receipt = await tx.wait();
-  const events = await factory.queryFilter(factory.filters.ProjectLaunched(), receipt?.blockNumber, receipt?.blockNumber);
-  const event = events[0] as any; 
-  
-  const tokenAddress = event.args[1];
-  const escrowAddress = event.args[2];
-  
-  const escrow = await ethers.getContractAt("MilestoneEscrow", escrowAddress);
-  const token = await ethers.getContractAt("ProjectToken", tokenAddress);
+  const event = (await factory.queryFilter(factory.filters.ProjectLaunched(), receipt?.blockNumber))[0] as any;
 
-  console.log("💰 2. FUNDING SUCCESS & CLAIMING TOKENS");
-  await investor1.sendTransaction({ to: escrowAddress, value: ethers.parseEther("6") });
-  await investor2.sendTransaction({ to: escrowAddress, value: ethers.parseEther("4") });
-  
-  await escrow.connect(developer).closeFundingAndStart();
-  await escrow.connect(investor1).claimTokens();
-  await escrow.connect(investor2).claimTokens();
+  const token = await ethers.getContractAt("ProjectToken", event.args.projectToken);
+  const escrow = await ethers.getContractAt("MilestoneEscrow", event.args.milestoneEscrow);
 
-  console.log("\n✅ 3. EXECUTING MILESTONE 0 (40%)");
-  await escrow.connect(investor1).vote(true);
-  await escrow.connect(developer).executeMilestone();
-  
-  const escrowBalAfterM0 = await ethers.provider.getBalance(escrowAddress);
-  // Net pool = 9.5 ETH. Milestone 0 pays out 40% (3.8 ETH). Remaining = 5.7 ETH.
-  console.log(`   Escrow Balance Remaining: ${ethers.formatEther(escrowBalAfterM0)} ETH`);
+  await seller.sendTransaction({ to: escrow.target, value: ethers.parseEther("1") });
+  await escrow.connect(dev).closeFundingAndStart();
+  await escrow.connect(seller).claimTokens();
 
-  console.log("\n⏳ 4. REQUESTING MILESTONE 1 & SIMULATING ABANDONMENT");
-  await escrow.connect(developer).requestNextMilestone();
-  console.log("   Developer requests Milestone 1. Investors refuse to vote Yes.");
-  
-  // Fast-forward 91 days
-  await ethers.provider.send("evm_increaseTime", [91 * 24 * 60 * 60]);
-  await ethers.provider.send("evm_mine", []);
-  console.log("   ✅ 90-day deadlock period has expired.");
+  console.log("\n📝 Seller lists 100,000 tokens for 2 ETH...");
+  const listAmount = ethers.parseEther("100000"); // 100k tokens
+  await token.connect(seller).approve(p2p.target, listAmount);
+  await p2p.connect(seller).createListing(token.target, listAmount, ethers.parseEther("2"));
 
-  console.log("\n🚨 5. INVESTORS PULL REMAINING FUNDS");
-  
-  const inv1Tokens = await token.balanceOf(investor1.address);
-  await token.connect(investor1).approve(escrowAddress, inv1Tokens);
-  
-  const balBefore = await ethers.provider.getBalance(investor1.address);
-  
-  const refundTx = await escrow.connect(investor1).refundDeadProject();
-  const refundReceipt = await refundTx.wait();
-  
-  const balAfter = await ethers.provider.getBalance(investor1.address);
-  const gasSpent = refundReceipt!.gasUsed * refundReceipt!.gasPrice;
-  const netRefund = balAfter - balBefore + gasSpent;
+  const treasuryBalBefore = await ethers.provider.getBalance(treasury.address);
+  const sellerBalBefore = await ethers.provider.getBalance(seller.address);
 
-  console.log(`\n📊 6. VERIFYING MID-PROJECT REFUND MATH`);
-  // Investor 1 owns 60% of the tokens. They should receive 60% of the remaining 5.7 ETH pool (3.42 ETH).
-  console.log(`   Investor 1 ETH Recovered: ${ethers.formatEther(netRefund)} ETH (Expected: 3.42)`);
+  console.log("💸 Buyer fills the order...");
+  await p2p.connect(buyer).fillListing(0, { value: ethers.parseEther("2") });
+
+  const buyerTokens = await token.balanceOf(buyer.address);
+  const treasuryFee = (await ethers.provider.getBalance(treasury.address)) - treasuryBalBefore;
+  const sellerProfit = (await ethers.provider.getBalance(seller.address)) - sellerBalBefore;
+
+  console.log(`   - Buyer Received:   ${ethers.formatEther(buyerTokens)} ACME (Expected: 100000.0)`);
+  console.log(`   - Treasury Fee:     ${ethers.formatEther(treasuryFee)} ETH (Expected: 0.02)`);
+  console.log(`   - Seller Received ~ ${ethers.formatEther(sellerProfit).substring(0, 4)} ETH (Expected: 1.98)`);
 }
-
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main().catch(console.error);

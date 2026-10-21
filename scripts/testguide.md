@@ -1,185 +1,81 @@
-# forgeCapita Test Guide
+# forgeCapita-v2 Test Guide
 
-This directory contains 10 automated simulation scripts designed to test the
-entire lifecycle, edge cases, and security fallbacks of the forgeCapita smart
-contract ecosystem.
+This directory contains 11 automated simulation scripts designed to test the entire lifecycle, edge cases, and security fallbacks of the updated forgeCapita-v2 smart contract ecosystem.
 
-These tests execute against a local Hardhat blockchain. They deploy fresh
-factory instances in memory, simulate time travel for deadline testing, and
-execute complex mathematical accounting to verify that capital is routed
-correctly.
-
-## Prerequisites
-
-Ensure that Docker is running and the contracts are compiled before executing
-the tests:
-
-```bash
-docker-compose up -d
-docker-compose exec hardhat npx hardhat compile
-```
+These tests execute against a local Hardhat blockchain. They deploy fresh factory instances in memory, simulate EVM time travel for deadline/quorum testing, and verify the Staked-Governance vote locks and 24/1/75 SaaS revenue routing.
 
 ## 🟢 Positive Lifecycle Scenarios
 
-### Scenario 1: Funding & Treasury Success Fee
-
+### Scenario 1: Crowdfunding, 5% Fee & 80/20 Token Split
 - **File:** `scenario1.ts`
-- **Description:** Tests the initial crowdfunding phase. Two investors fund a
-  10 ETH project. The developer closes the funding phase, triggering the
-  automated 5% platform fee transfer to the ForgeCapita Treasury.
-- **Execution:**
+- **Description:** Tests the initial capital formation. Investors fund a 10 ETH goal. Verifies that the platform Treasury pulls a 5% fee (0.5 ETH), investors claim their pro-rata shares of the 80% public token pool, and the developer's 20% equity is correctly locked in the Escrow for cliff vesting.
+```bash
+docker-compose exec hardhat npx hardhat run ./scripts/scenario1.ts --network localhost
+```
 
-  ```bash
-  docker-compose exec hardhat npx hardhat run ./scripts/scenario1.ts --network localhost
-  ```
-
-- **Expected result:** Investor 1 claims 400,000 tokens, Investor 2 claims
-  600,000 tokens, and the Treasury successfully receives exactly 0.5 ETH (the
-  5% success fee).
-
-### Scenario 2: Milestone Execution & Revenue Router Split
-
+### Scenario 2: Staked Governance & Fast-Track Execution
 - **File:** `scenario2.ts`
-- **Description:** Tests the absolute majority voting mechanics and the SaaS
-  revenue "Pull-over-Push" routing. Investors vote to release the first
-  milestone. A customer then pays 1 ETH for the SaaS product.
-- **Execution:**
+- **Description:** Tests the active governance requirement. Investors stake their equity in the `DividendDistributor` to activate voting power. A majority holder (>50%) votes YES, triggering the instant "Fast-Track" milestone execution.
+```bash
+docker-compose exec hardhat npx hardhat run ./scripts/scenario2.ts --network localhost
+```
 
-  ```bash
-  docker-compose exec hardhat npx hardhat run ./scripts/scenario2.ts --network localhost
-  ```
-
-- **Expected result:** The developer receives 4.75 ETH for the milestone. The
-  1 ETH SaaS payment is split successfully: 0.6 ETH is pushed directly to the
-  Dividend Pool, 0.39 ETH is held in the Developer's ledger, and 0.01 ETH is
-  held in the Treasury ledger. The developer successfully pulls their 0.39 ETH.
-
-### Scenario 3: Complete Roadmap Lifecycle
-
+### Scenario 3: Complete Roadmap & Cliff Vesting
 - **File:** `scenario3.ts`
-- **Description:** Proves that a developer can traverse a multi-stage roadmap
-  without the contract deadlocking. Simulates a 3-stage roadmap (40% / 30% /
-  30%) by looping through `requestNextMilestone()`, `vote()`, and
-  `executeMilestone()`.
-- **Execution:**
-
-  ```bash
-  docker-compose exec hardhat npx hardhat run ./scripts/scenario3.ts --network localhost
-  ```
-
-- **Expected result:** All three milestones execute consecutively. The final
-  Escrow balance is strictly 0.0 ETH, proving that 100% of the net funds were
-  paid out without mathematical remainder dust.
-
-### Scenario 4: High-Volume SaaS & Yield Accumulation
-
+- **Description:** Proves a developer can successfully traverse a multi-stage roadmap without deadlocking. Upon executing the final milestone, the Escrow ETH pool is fully drained to the developer, and the 20% developer token equity cliff-vests to their wallet.
+```bash
+docker-compose exec hardhat npx hardhat run ./scripts/scenario3.ts --network localhost
+```
+### Scenario 4: 120-Day Deadlock & Pro-Rata Refunds
 - **File:** `scenario4.ts`
-- **Description:** Tests the scalable math of the DividendDistributor and
-  RevenueRouter. Three different customers pay for the SaaS product, totaling
-  4.5 ETH.
-- **Execution:**
+- **Description:** Tests project abandonment. 120 days pass without a milestone execution. Investors unstake their tokens and surrender them via `refundDeadProject()` to claim their exact mathematical share of the remaining locked ETH.
+```bash
+docker-compose exec hardhat npx hardhat run ./scripts/scenario4.ts --network localhost
+```
 
-  ```bash
-  docker-compose exec hardhat npx hardhat run ./scripts/scenario4.ts --network localhost
-  ```
+## 🟡 Revenue & Utility Scenarios
 
-- **Expected result:** The Router ledgers accurately accumulate the cuts over
-  multiple payments. Investor 1, holding 60% of the equity, successfully
-  pulls exactly 60% of the accumulated 2.70 ETH dividend pool (1.62 ETH).
-
-## 🔴 Negative Failure Scenarios
-
-### Scenario 5: Mid-Project Deadlock (90-Day Timeout)
-
+### Scenario 5: SaaS Revenue Routing (24/1/75 Split)
 - **File:** `scenario5.ts`
-- **Description:** Tests a mid-project abandonment. The project funds
-  successfully, but 91 days pass without a milestone vote occurring.
-- **Execution:**
-
-  ```bash
-  docker-compose exec hardhat npx hardhat run ./scripts/scenario5.ts --network localhost
-  ```
-
-- **Expected result:** Investors surrender their Project Tokens back to the
-  Escrow contract via `refundDeadProject()` and recover their proportional
-  share of the remaining locked ETH pool.
-
-### Scenario 6: Soft-Cap Failure (Funding Deadline Missed)
-
+- **Description:** A customer pays for a SaaS subscription. Verifies the `RevenueRouter` perfectly splits the payment: 1% to the Treasury, 24% to the Developer's pull ledger, and 75% pushed to the `DividendDistributor` for staked investors to claim.
+```bash
+docker-compose exec hardhat npx hardhat run ./scripts/scenario5.ts --network localhost
+```
+### Scenario 6: Zero-Staker Revenue Fallback
 - **File:** `scenario6.ts`
-- **Description:** Tests an underfunded project. The developer aims for 10 ETH
-  but raises only 7 ETH. The 30-day funding deadline expires.
-- **Execution:**
-
-  ```bash
-  docker-compose exec hardhat npx hardhat run ./scripts/scenario6.ts --network localhost
-  ```
-
-- **Expected result:** Because the goal was missed, `closeFundingAndStart()`
-  cannot be called. Investors call `refundFailedCrowdfund()` and retrieve
-  their original ETH deposits without ever touching Project Tokens.
-
-### Scenario 7: Mid-Project Deadlock on Second Milestone
-
+- **Description:** Tests the `RevenueRouter` edge case where a SaaS payment arrives, but no investors are currently staked. Verifies the transaction does not revert, and the unallocated 75% yield safely defaults to the developer's operating runway.
+```bash
+docker-compose exec hardhat npx hardhat run ./scripts/scenario6.ts --network localhost
+```
+### Scenario 7: Secondary Market (Native P2P Exchange)
 - **File:** `scenario7.ts`
-- **Description:** Proves that the Escrow protects remaining capital even if a
-  developer successfully delivers early milestones but abandons later ones.
-  Milestone 0 executes, but Milestone 1 times out after 90 days.
-- **Execution:**
+- **Description:** Tests the non-custodial OTC order desk. An investor lists tokens for a fixed ETH price. A buyer fills the order. Verifies the secure atomic swap and the 1% secondary trading fee routed to the platform Treasury.
+```bash
+docker-compose exec hardhat npx hardhat run ./scripts/scenario7.ts --network localhost
+``` 
+## 🔴 Governance & Edge Case Scenarios
 
-  ```bash
-  docker-compose exec hardhat npx hardhat run ./scripts/scenario7.ts --network localhost
-  ```
-
-- **Expected result:** Investors surrender their Project Tokens and pull their
-  proportional share of the remaining ETH pool (for example, from the 5.7 ETH
-  left in the vault rather than the original 9.5 ETH).
-
-### Scenario 8: Unauthorized Execution Attempt (Absolute Majority)
-
+### Scenario 8: 28-Day Quorum Fallback Execution
 - **File:** `scenario8.ts`
-- **Description:** Proves the Sybil-resistant voting safeguards. An investor
-  with only 40% voting power votes "Yes." The developer attempts to forcibly
-  unlock the funds.
-- **Execution:**
-
-  ```bash
-  docker-compose exec hardhat npx hardhat run ./scripts/scenario8.ts --network localhost
-  ```
-
-- **Expected result:** The execution transaction is rejected and reverts with
-  `"Not enough Yes votes"`, proving that strictly more than 50% of the entire
-  token supply is required to unlock capital.
-
-## 🛡️ Edge Case & Exploit Scenarios
-
-### Scenario 9: "Double-Dip" Exploit Attempt
-
+- **Description:** Tests voter apathy mitigation. A milestone receives only 30% YES votes (failing the >50% Fast-Track). The EVM fast-forwards 28 days. Because 30% meets the minimum 20% quorum, the milestone executes successfully.
+```bash
+docker-compose exec hardhat npx hardhat run ./scripts/scenario8.ts --network localhost
+```
+### Scenario 9: Soft-Cap Failure (Missed Funding Deadline)
 - **File:** `scenario9.ts`
-- **Description:** Proves that malicious actors cannot drain the contract or rig
-  votes by calling functions multiple times. Simulates an investor trying to
-  claim tokens twice and vote twice.
-- **Execution:**
-
-  ```bash
-  docker-compose exec hardhat npx hardhat run ./scripts/scenario9.ts --network localhost
-  ```
-
-- **Expected result:** Both exploit attempts fail immediately. The EVM reverts
-  with `"Tokens already claimed"` and `"Already voted"`.
-
-### Scenario 10: Retroactive Yield Theft Protection
-
+- **Description:** Tests an underfunded campaign. The 30-day funding timer expires before the goal is reached. Investors call `refundFailedCrowdfund()` to retrieve 100% of their raw ETH deposits.
+```bash
+docker-compose exec hardhat npx hardhat run ./scripts/scenario9.ts --network localhost
+``` 
+### Scenario 10: Sybil Vote-Lock Exploit Protection
 - **File:** `scenario10.ts`
-- **Description:** Tests the "High-Water Mark" scaled accumulator math. Investor
-  1 stakes early and SaaS revenue arrives. Investor 2 stakes later, and more
-  SaaS revenue arrives.
-- **Execution:**
-
-  ```bash
-  docker-compose exec hardhat npx hardhat run ./scripts/scenario10.ts --network localhost
-  ```
-
-- **Expected result:** Investor 2 receives a share only of the revenue generated
-  after they stake. The contract mathematically prevents Investor 2 from
-  claiming revenue generated while only Investor 1 was staked.
+- **Description:** Proves that an investor cannot double-vote. Once an investor casts a vote on an active milestone, the `DividendDistributor` actively blocks them from withdrawing their tokens, physically preventing Sybil transfers until the poll closes.
+```bash
+docker-compose exec hardhat npx hardhat run ./scripts/scenario10.ts --network localhost
+```     
+### Scenario 11: Developer Role Migration
+- **File:** `scenario11.ts`
+- **Description:** Tests the two-step developer transfer protocol. The active developer proposes a new wallet address. The new address accepts. Verifies that milestone payouts and permissions securely migrate to the new address.
+```bash
+docker-compose exec hardhat npx hardhat run ./scripts/scenario11.ts --network localhost
+``` 

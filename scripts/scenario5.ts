@@ -2,69 +2,45 @@ import { network } from "hardhat";
 
 async function main() {
   const { ethers } = await network.create();
-  const [developer, investor1, investor2, treasury] = await ethers.getSigners();
+  const [dev, inv, customer, treasury] = await ethers.getSigners();
 
-  console.log("🚀 1. Deploying Factory & Launching Project...");
+  console.log("🚀 SCENARIO 5: SAAS REVENUE (24/1/75 SPLIT)");
   const Factory = await ethers.getContractFactory("ForgeCapitaFactory");
   const factory = await Factory.deploy(treasury.address);
-  await factory.waitForDeployment();
-  
-  const tx = await factory.connect(developer).launchProject(
-      "forgeCapita Equity", "FGC", 1000000n, ["MVP Build"], [100], ethers.parseEther("10"), 30
-  );
+
+  const tx = await factory.connect(dev).launchProject("SaaS", "SAS", 1000000n, ["M0"], [100n], ethers.parseEther("1"), 30n);
   const receipt = await tx.wait();
-  const events = await factory.queryFilter(factory.filters.ProjectLaunched(), receipt?.blockNumber, receipt?.blockNumber);
-  const event = events[0] as any; 
-  
-  const tokenAddress = event.args[1];
-  const escrowAddress = event.args[2];
-  
-  const escrow = await ethers.getContractAt("MilestoneEscrow", escrowAddress);
-  const token = await ethers.getContractAt("ProjectToken", tokenAddress);
+  const event = (await factory.queryFilter(factory.filters.ProjectLaunched(), receipt?.blockNumber))[0] as any;
 
-  console.log("💰 2. FUNDING SUCCESS (10 ETH)");
-  await investor1.sendTransaction({ to: escrowAddress, value: ethers.parseEther("6") });
-  await investor2.sendTransaction({ to: escrowAddress, value: ethers.parseEther("4") });
-  await escrow.connect(developer).closeFundingAndStart();
-  await escrow.connect(investor1).claimTokens();
-  await escrow.connect(investor2).claimTokens();
+  const token = await ethers.getContractAt("ProjectToken", event.args.projectToken);
+  const escrow = await ethers.getContractAt("MilestoneEscrow", event.args.milestoneEscrow);
+  const distributor = await ethers.getContractAt("DividendDistributor", event.args.dividendDistributor);
+  const router = await ethers.getContractAt("RevenueRouter", event.args.revenueRouter);
 
-  console.log("\n⏳ 3. SIMULATING ABANDONMENT (Fast-forwarding 91 days)...");
-  // Hardhat time travel: Advance the blockchain by 91 days (in seconds)
-  await ethers.provider.send("evm_increaseTime", [91 * 24 * 60 * 60]);
-  await ethers.provider.send("evm_mine", []);
-  
-  console.log("   ✅ 90-day deadlock period has expired.");
+  // Fund, claim, and stake to prepare dividend pool
+  await inv.sendTransaction({ to: escrow.target, value: ethers.parseEther("1") });
+  await escrow.connect(dev).closeFundingAndStart();
+  await escrow.connect(inv).claimTokens();
+  const invBal = await token.balanceOf(inv.address);
+  await token.connect(inv).approve(distributor.target, invBal);
+  await distributor.connect(inv).stake(invBal);
 
-  console.log("\n🚨 4. INVESTORS TRIGGER DEADLOCK REFUND");
-  
-  // The total raised was 10 ETH. 5% went to treasury. Net pool = 9.5 ETH.
-  // Investor 1 holds 60% of the tokens, so they are entitled to 60% of 9.5 ETH (5.7 ETH).
-  
-  const inv1Tokens = await token.balanceOf(investor1.address);
-  
-  // Step A: Approve the Escrow to pull the tokens
-  console.log("   Investor 1 surrendering 600,000 FGC tokens...");
-  await token.connect(investor1).approve(escrowAddress, inv1Tokens);
-  
-  const balBefore = await ethers.provider.getBalance(investor1.address);
-  
-  // Step B: Execute the refund
-  const refundTx = await escrow.connect(investor1).refundDeadProject();
-  const refundReceipt = await refundTx.wait();
-  
-  const balAfter = await ethers.provider.getBalance(investor1.address);
-  const gasSpent = refundReceipt!.gasUsed * refundReceipt!.gasPrice;
-  const netRefund = balAfter - balBefore + gasSpent;
+  console.log("\n💳 Customer pays 10 ETH for SaaS subscription...");
+  await router.connect(customer).routePayment({ value: ethers.parseEther("10") });
 
-  const inv1TokensAfter = await token.balanceOf(investor1.address);
+  const devLedger = await router.creatorPendingFunds();
+  const treasuryLedger = await router.treasuryPendingFunds();
+  const distributorEth = await ethers.provider.getBalance(distributor.target);
 
-  console.log(`\n📊 5. VERIFYING REFUND MATH`);
-  console.log(`   Investor 1 Tokens Remaining: ${ethers.formatEther(inv1TokensAfter)} FGC (Expected: 0.0)`);
-  console.log(`   Investor 1 ETH Recovered: ${ethers.formatEther(netRefund)} ETH (Expected: 5.7)`);
+  console.log(`   - Dev Ledger:      ${ethers.formatEther(devLedger)} ETH (Expected: 2.4)`);
+  console.log(`   - Treasury Ledger: ${ethers.formatEther(treasuryLedger)} ETH (Expected: 0.1)`);
+  console.log(`   - Dividend Pool:   ${ethers.formatEther(distributorEth)} ETH (Expected: 7.5)`);
+
+  console.log("\n📥 Investor claims yield...");
+  const invEthBefore = await ethers.provider.getBalance(inv.address);
+  await distributor.connect(inv).claimYield();
+  const invEthAfter = await ethers.provider.getBalance(inv.address);
+  // Subtracting gas costs approximately
+  console.log(`   - Investor Received ~ ${ethers.formatEther(invEthAfter - invEthBefore).substring(0, 4)} ETH (Expected: 7.5)`);
 }
-
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main().catch(console.error);
