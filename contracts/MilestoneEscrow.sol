@@ -3,28 +3,29 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interfaces/IDividendDistributor.sol";
 
-contract MilestoneEscrow is ReentrancyGuard {
-    IERC20 public immutable projectToken;
-    IDividendDistributor public immutable dividendDistributor;
+contract MilestoneEscrow is Initializable, ReentrancyGuard {
+    IERC20 public projectToken;
+    IDividendDistributor public dividendDistributor;
     address payable public developer;
     address payable public pendingDeveloper;
-    address payable public immutable forgeCapitaTreasury;
+    address payable public forgeCapitaTreasury;
 
-    uint256 public immutable publicSupply;
-    uint256 public immutable developerSupply;
+    uint256 public publicSupply;
+    uint256 public developerSupply;
     uint256 public remainingPublicTokens;
     uint256 public totalRaised;
     uint256 public netFunds;
 
-    bool public isFundingActive = true;
-    bool public projectCancelled = false;
+    bool public isFundingActive;
+    bool public projectCancelled;
 
-    uint256 public immutable fundingGoal;
-    uint256 public immutable fundingDeadline;
-
+    uint256 public fundingGoal;
+    uint256 public fundingDeadline;
     uint256 public milestoneDeadline;
+
     uint256 public constant MAX_INACTIVITY_PERIOD = 120 days;
     uint256 public constant PLATFORM_FEE_PERCENT = 5;
     uint256 public constant VOTING_PERIOD = 28 days;
@@ -72,7 +73,7 @@ contract MilestoneEscrow is ReentrancyGuard {
         address indexed newDeveloper
     );
 
-    constructor(
+    function initialize(
         address _projectToken,
         address payable _developer,
         uint256 _totalTokenSupply,
@@ -82,18 +83,20 @@ contract MilestoneEscrow is ReentrancyGuard {
         uint256 _fundingDurationDays,
         address payable _treasury,
         address _dividendDistributor
-    ) {
+    ) public initializer {
         projectToken = IERC20(_projectToken);
         developer = _developer;
         dividendDistributor = IDividendDistributor(_dividendDistributor);
+        forgeCapitaTreasury = _treasury;
 
         developerSupply = (_totalTokenSupply * 20) / 100;
         publicSupply = _totalTokenSupply - developerSupply;
         remainingPublicTokens = publicSupply;
 
-        forgeCapitaTreasury = _treasury;
         fundingGoal = _fundingGoal;
         fundingDeadline = block.timestamp + (_fundingDurationDays * 1 days);
+        isFundingActive = true;
+        projectCancelled = false;
 
         require(
             _milestoneDescriptions.length == _milestonePercentages.length,
@@ -136,7 +139,6 @@ contract MilestoneEscrow is ReentrancyGuard {
             "Funding deadline has passed"
         );
         require(msg.sender != developer, "Developer cannot fund campaign");
-
         deposits[msg.sender] += msg.value;
         emit DepositReceived(msg.sender, msg.value);
     }
@@ -148,12 +150,10 @@ contract MilestoneEscrow is ReentrancyGuard {
             address(this).balance >= fundingGoal,
             "Funding goal not reached"
         );
-
         isFundingActive = false;
         totalRaised = address(this).balance;
         uint256 fee = (totalRaised * PLATFORM_FEE_PERCENT) / 100;
         netFunds = totalRaised - fee;
-
         (bool feeSuccess, ) = forgeCapitaTreasury.call{value: fee}("");
         require(feeSuccess, "Fee transfer failed");
         emit PlatformFeeCollected(fee);
@@ -165,29 +165,24 @@ contract MilestoneEscrow is ReentrancyGuard {
         require(!projectCancelled, "Project cancelled");
         require(index == currentMilestoneIndex, "Invalid milestone index");
         require(!milestones[index].isVotingOpen, "Milestone already open");
-
         if (index > 0) {
             require(
                 milestones[index - 1].isExecuted,
                 "Previous milestone not executed"
             );
         }
-
         milestones[index].isVotingOpen = true;
         milestones[index].votingStartTime = block.timestamp;
-
         if (index == 0) {
             milestoneDeadline = block.timestamp + MAX_INACTIVITY_PERIOD;
         }
-
         emit VotingStarted(index);
     }
 
-    function claimTokens() external nonReentrant {
+    function claimTokens() external {
         require(!isFundingActive, "Funding phase is still active");
         require(!hasClaimedTokens[msg.sender], "Tokens already claimed");
         require(deposits[msg.sender] > 0, "No investment found");
-
         hasClaimedTokens[msg.sender] = true;
         uint256 tokenShare = (deposits[msg.sender] * publicSupply) /
             totalRaised;
@@ -197,33 +192,28 @@ contract MilestoneEscrow is ReentrancyGuard {
         );
     }
 
-    function vote(bool support) external nonReentrant {
+    function vote(bool support) external {
         require(!isFundingActive, "Funding is still active");
         require(!projectCancelled, "Project has been cancelled");
         require(msg.sender != developer, "Developer cannot vote");
-
         Milestone storage milestone = milestones[currentMilestoneIndex];
         require(milestone.isVotingOpen, "Voting is not open");
         require(!hasVoted[currentMilestoneIndex][msg.sender], "Already voted");
 
-        // Voting power derived from tokens actively committed to staking
         uint256 voterWeight = dividendDistributor.stakedBalance(msg.sender);
         require(voterWeight > 0, "No voting power (must stake tokens first)");
-
         hasVoted[currentMilestoneIndex][msg.sender] = true;
         if (support) milestone.yesVotes += voterWeight;
         else milestone.noVotes += voterWeight;
-
         emit Voted(msg.sender, currentMilestoneIndex, support, voterWeight);
     }
 
-    function executeMilestone() external nonReentrant {
+    function executeMilestone() external {
         require(!projectCancelled, "Project cancelled");
         require(
             block.timestamp <= milestoneDeadline,
             "Milestone deadline passed. Project in deadlock."
         );
-
         Milestone storage milestone = milestones[currentMilestoneIndex];
         require(milestone.isVotingOpen, "Voting is not open");
 
@@ -238,21 +228,18 @@ contract MilestoneEscrow is ReentrancyGuard {
             fastTrackPassed || quorumPassed,
             "Milestone approval conditions not met"
         );
-
         milestone.isExecuted = true;
         milestone.isVotingOpen = false;
 
         uint256 ethToRelease = (netFunds * milestone.unlockPercentage) / 100;
         bool isFinalMilestone = (currentMilestoneIndex ==
             milestones.length - 1);
-
         currentMilestoneIndex++;
 
         if (currentMilestoneIndex < milestones.length) {
             milestoneDeadline = block.timestamp + MAX_INACTIVITY_PERIOD;
         }
 
-        // Cliff Vesting: Tokens release only when 100% of milestones execute
         uint256 tokensVested = 0;
         if (isFinalMilestone) {
             tokensVested = developerSupply;
@@ -264,7 +251,6 @@ contract MilestoneEscrow is ReentrancyGuard {
 
         (bool success, ) = developer.call{value: ethToRelease}("");
         require(success, "ETH transfer failed");
-
         emit MilestoneExecuted(
             currentMilestoneIndex - 1,
             ethToRelease,
@@ -272,9 +258,6 @@ contract MilestoneEscrow is ReentrancyGuard {
         );
     }
 
-    /**
-     * @dev Checks if an account's staked tokens are locked in an active vote.
-     */
     function isUserVoteLocked(address account) external view returns (bool) {
         if (
             projectCancelled ||
@@ -288,17 +271,15 @@ contract MilestoneEscrow is ReentrancyGuard {
             milestone.isVotingOpen && hasVoted[currentMilestoneIndex][account];
     }
 
-    function refundFailedCrowdfund() external nonReentrant {
+    function refundFailedCrowdfund() external {
         require(isFundingActive, "Funding already closed successfully");
         require(block.timestamp > fundingDeadline, "Deadline not reached yet");
         require(
             address(this).balance < fundingGoal,
             "Funding goal was reached"
         );
-
         uint256 invested = deposits[msg.sender];
         require(invested > 0, "No funds to refund");
-
         deposits[msg.sender] = 0;
         (bool success, ) = msg.sender.call{value: invested}("");
         require(success, "Refund failed");
@@ -307,12 +288,11 @@ contract MilestoneEscrow is ReentrancyGuard {
     function cancelProject(string calldata reason) external {
         require(msg.sender == developer, "Only developer can cancel");
         require(!isFundingActive, "Funding still active");
-
         projectCancelled = true;
         emit ProjectCancelled(reason);
     }
 
-    function refundDeadProject() external nonReentrant {
+    function refundDeadProject() external {
         require(!isFundingActive, "Crowdfunding still active");
         require(
             projectCancelled || block.timestamp > milestoneDeadline,
@@ -329,7 +309,6 @@ contract MilestoneEscrow is ReentrancyGuard {
         uint256 refundAmount = (userTokens * address(this).balance) /
             remainingPublicTokens;
         remainingPublicTokens -= userTokens;
-
         require(
             projectToken.transferFrom(msg.sender, address(this), userTokens),
             "Token surrender failed"
@@ -337,14 +316,12 @@ contract MilestoneEscrow is ReentrancyGuard {
 
         (bool success, ) = msg.sender.call{value: refundAmount}("");
         require(success, "Refund failed");
-
         emit RefundClaimed(msg.sender, refundAmount);
     }
 
     function proposeNewDeveloper(address payable _newDeveloper) external {
         require(msg.sender == developer, "Only active developer can propose");
         require(_newDeveloper != address(0), "Cannot transfer to zero address");
-
         pendingDeveloper = _newDeveloper;
         emit DeveloperTransferProposed(developer, _newDeveloper);
     }
@@ -354,11 +331,9 @@ contract MilestoneEscrow is ReentrancyGuard {
             msg.sender == pendingDeveloper,
             "Only pending developer can accept"
         );
-
         address oldDeveloper = developer;
         developer = pendingDeveloper;
         pendingDeveloper = payable(address(0));
-
         emit DeveloperTransferAccepted(oldDeveloper, developer);
     }
 }

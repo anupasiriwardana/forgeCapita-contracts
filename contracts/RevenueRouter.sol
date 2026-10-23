@@ -2,13 +2,14 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interfaces/IDividendDistributor.sol";
 import "./interfaces/IMilestoneEscrow.sol";
 
-contract RevenueRouter is ReentrancyGuard {
-    address public immutable milestoneEscrow;
-    address payable public immutable dividendDistributor;
-    address payable public immutable forgeCapitaTreasury;
+contract RevenueRouter is Initializable, ReentrancyGuard {
+    address public milestoneEscrow;
+    address payable public dividendDistributor;
+    address payable public forgeCapitaTreasury;
 
     uint256 public creatorPendingFunds;
     uint256 public treasuryPendingFunds;
@@ -22,11 +23,11 @@ contract RevenueRouter is ReentrancyGuard {
     );
     event FundsClaimed(address indexed claimant, uint256 amount);
 
-    constructor(
+    function initialize(
         address _milestoneEscrow,
         address payable _dividendDistributor,
         address payable _treasury
-    ) {
+    ) public initializer {
         milestoneEscrow = _milestoneEscrow;
         dividendDistributor = _dividendDistributor;
         forgeCapitaTreasury = _treasury;
@@ -35,7 +36,6 @@ contract RevenueRouter is ReentrancyGuard {
     function routePayment() public payable {
         require(msg.value > 0, "You must send ETH to pay.");
         uint256 paymentAmount = msg.value;
-
         uint256 platformFee = (paymentAmount * 1) / 100;
         uint256 creatorCut = (paymentAmount * 24) / 100;
         uint256 investorCut = paymentAmount - creatorCut - platformFee;
@@ -61,10 +61,9 @@ contract RevenueRouter is ReentrancyGuard {
         );
     }
 
-    function claimCreatorFunds() external nonReentrant {
+    function claimCreatorFunds() external {
         uint256 amount = creatorPendingFunds;
         require(amount > 0, "No funds to claim");
-
         address payable currentDeveloper = IMilestoneEscrow(milestoneEscrow)
             .developer();
         require(
@@ -78,7 +77,7 @@ contract RevenueRouter is ReentrancyGuard {
         emit FundsClaimed(currentDeveloper, amount);
     }
 
-    function claimTreasuryFunds() external nonReentrant {
+    function claimTreasuryFunds() external {
         uint256 amount = treasuryPendingFunds;
         require(amount > 0, "No funds to claim");
 

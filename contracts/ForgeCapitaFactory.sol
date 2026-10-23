@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts/proxy/Clones.sol";
 import "./ProjectToken.sol";
 import "./MilestoneEscrow.sol";
 import "./DividendDistributor.sol";
@@ -8,8 +9,16 @@ import "./RevenueRouter.sol";
 import "./P2PExchange.sol";
 
 contract ForgeCapitaFactory {
+    address public immutable masterToken;
+    address public immutable masterEscrow;
+    address public immutable masterDistributor;
+    address public immutable masterRouter;
+
     address payable public immutable forgeCapitaTreasury;
     P2PExchange public immutable p2pExchange;
+
+    mapping(address => address[]) public developerProjects;
+    address[] public allProjects;
 
     event ProjectLaunched(
         address indexed developer,
@@ -19,10 +28,17 @@ contract ForgeCapitaFactory {
         address revenueRouter
     );
 
-    mapping(address => address[]) public developerProjects;
-    address[] public allProjects;
-
-    constructor(address payable _treasury) {
+    constructor(
+        address _masterToken,
+        address _masterEscrow,
+        address _masterDistributor,
+        address _masterRouter,
+        address payable _treasury
+    ) {
+        masterToken = _masterToken;
+        masterEscrow = _masterEscrow;
+        masterDistributor = _masterDistributor;
+        masterRouter = _masterRouter;
         forgeCapitaTreasury = _treasury;
         p2pExchange = new P2PExchange(_treasury);
     }
@@ -36,20 +52,28 @@ contract ForgeCapitaFactory {
         uint256 _fundingGoal,
         uint256 _fundingDurationDays
     ) external returns (address, address, address, address) {
-        ProjectToken token = new ProjectToken(
+        // 1. Clone & Initialize Token
+        address tokenClone = Clones.clone(masterToken);
+        ProjectToken(tokenClone).initialize(
             _name,
             _symbol,
             _totalSupply,
             address(this)
         );
-        uint256 scaledSupply = _totalSupply * 10 ** token.decimals();
 
-        DividendDistributor distributor = new DividendDistributor(
-            address(token)
+        // 2. Clone & Initialize Distributor
+        address distributorClone = Clones.clone(masterDistributor);
+        DividendDistributor(payable(distributorClone)).initialize(
+            tokenClone,
+            address(this)
         );
 
-        MilestoneEscrow escrow = new MilestoneEscrow(
-            address(token),
+        // 3. Clone & Initialize Escrow
+        address escrowClone = Clones.clone(masterEscrow);
+        uint256 scaledSupply = _totalSupply *
+            10 ** ProjectToken(tokenClone).decimals();
+        MilestoneEscrow(payable(escrowClone)).initialize(
+            tokenClone,
             payable(msg.sender),
             scaledSupply,
             _milestoneDescriptions,
@@ -57,34 +81,35 @@ contract ForgeCapitaFactory {
             _fundingGoal,
             _fundingDurationDays,
             forgeCapitaTreasury,
-            address(distributor)
+            distributorClone
         );
 
-        distributor.setMilestoneEscrow(address(escrow));
-        token.transfer(address(escrow), scaledSupply);
-
-        RevenueRouter router = new RevenueRouter(
-            address(escrow),
-            payable(address(distributor)),
+        // 4. Clone & Initialize Router
+        address routerClone = Clones.clone(masterRouter);
+        RevenueRouter(payable(routerClone)).initialize(
+            escrowClone,
+            payable(distributorClone),
             forgeCapitaTreasury
         );
 
-        developerProjects[msg.sender].push(address(token));
-        allProjects.push(address(token));
+        // Wire contracts together
+        DividendDistributor(payable(distributorClone)).setMilestoneEscrow(
+            escrowClone
+        );
+        ProjectToken(tokenClone).transfer(escrowClone, scaledSupply);
+
+        developerProjects[msg.sender].push(tokenClone);
+        allProjects.push(tokenClone);
 
         emit ProjectLaunched(
             msg.sender,
-            address(token),
-            address(escrow),
-            address(distributor),
-            address(router)
+            tokenClone,
+            escrowClone,
+            distributorClone,
+            routerClone
         );
-        return (
-            address(token),
-            address(escrow),
-            address(distributor),
-            address(router)
-        );
+
+        return (tokenClone, escrowClone, distributorClone, routerClone);
     }
 
     function getTotalProjects() external view returns (uint256) {

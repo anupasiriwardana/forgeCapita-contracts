@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-/**
- * @title ProjectToken
- * @dev Lightweight ERC-20 equity token for startups launching on ForgeCapita.
- */
-contract ProjectToken is ERC20, Ownable {
-    constructor(
+contract ProjectToken is Initializable, ERC20Upgradeable, OwnableUpgradeable {
+    function initialize(
         string memory name, 
         string memory symbol, 
         uint256 initialSupply, 
         address initialOwner
-    ) ERC20(name, symbol) Ownable(initialOwner) {
+    ) public initializer {
+        __ERC20_init(name, symbol);
+        __Ownable_init(initialOwner);
         _mint(initialOwner, initialSupply * 10 ** decimals());
     }
 
