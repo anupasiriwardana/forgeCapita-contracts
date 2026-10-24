@@ -86,7 +86,7 @@ async function main() {
   const startTx = await escrow.connect(developer).startMilestone(0);
   const startReceipt = await startTx.wait();
   const devStartBalAfter = await ethers.provider.getBalance(developer.address);
-  console.log(`     Developer start milestone gas cost: ${ethers.formatEther(devStartBalBefore - devStartBalAfter)} ETH (Founder pays)`);
+  console.log(`     Developer start milestone gas cost: ${ethers.formatEther(devStartBalBefore - devStartBalAfter)} ETH (Treasury subsidized below avg)`);
   
   console.log("   - Milestone 0 Opened by Developer.");
 
@@ -120,7 +120,7 @@ async function main() {
   // We need to account for the ethReleased that was deposited into the developer's wallet during execution
   const gasSpentExec = executionCostRaw + ethReleased; 
 
-  console.log(`     Developer execute milestone gas cost: ${ethers.formatEther(gasSpentExec)} ETH (Founder pays)`);
+  console.log(`     Developer execute milestone gas cost: ${ethers.formatEther(gasSpentExec)} ETH (Treasury subsidized below avg)`);
 
   console.log(`     Milestone 0 Executed Successfully!`);
   console.log(`   - Total Net Escrow Funds: ${ethers.formatEther(escrowEthBefore)} ETH`);

@@ -17,7 +17,7 @@ docker-compose exec hardhat npx hardhat run ./scripts/scenario1.ts --network loc
 ### Scenario 2: Staked Governance, Fast-Track Execution & Gas Tracking
 
 * **File:** `scenario2.ts`
-* **Description:** Tests the active governance requirement. Investors stake their equity to activate voting power. A majority holder (>50%) votes YES, triggering instant execution. Logs the explicit gas costs to prove that developers pay for milestone execution while investor voting is optimized.
+* **Description:** Tests the active governance requirement. Investors stake their equity to activate voting power. A majority holder (>50%) votes YES, triggering instant execution. Logs the explicit gas costs to prove that developers have their milestone execution gas fully subsidized by the treasury.
 
 ```bash
 docker-compose exec hardhat npx hardhat run ./scripts/scenario2.ts --network localhost

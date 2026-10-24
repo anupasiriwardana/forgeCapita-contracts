@@ -104,7 +104,7 @@ async function main() {
   const devCloseBalAfter = await ethers.provider.getBalance(developer.address);
   const gasSpentClose = devCloseBalBefore - devCloseBalAfter;
   
-  console.log(`     Developer paid close funding gas: ${ethers.formatEther(gasSpentClose)} ETH (Founder pays)`);
+  console.log(`     Developer close funding gas cost: ${ethers.formatEther(gasSpentClose)} ETH (Treasury subsidized below avg)`);
 
   console.log("\n  5. CLAIMING TOKENS");
   console.log("   Investors pulling their pro-rata share of the 80% public supply (800,000 FGC)...");

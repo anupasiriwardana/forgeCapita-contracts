@@ -72,7 +72,7 @@ async function main() {
   const execBalAfter = await ethers.provider.getBalance(developer.address);
   
   // Developer received 3.8 ETH (40% of 9.5). Gas spent is (Before - After) + Received
-  console.log(`     Developer M0 execution gas cost: ${ethers.formatEther((execBalBefore - execBalAfter) + ethers.parseEther("3.8"))} ETH (Founder pays)`);
+  console.log(`     Developer M0 execution gas cost: ${ethers.formatEther((execBalBefore - execBalAfter) + ethers.parseEther("3.8"))} ETH (Treasury subsidized below avg)`);
 
 
   let devTokens = await token.balanceOf(developer.address);
