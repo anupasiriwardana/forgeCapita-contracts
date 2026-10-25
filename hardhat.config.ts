@@ -47,25 +47,27 @@ export default defineConfig({
       chainId: 97,
     },
   },
-  // verify: {
-  //   etherscan: {
-  //     apiKey: process.env.ETHERSCAN_API_KEY || "",
-  //   },
-  // },
-  etherscan: {
-    apiKey: {
-      arbitrumSepolia: process.env.ARBISCAN_API_KEY || "",
-      bscTestnet: process.env.BSCSCAN_API_KEY || "",
+  verify: {
+    etherscan: {
+      apiKey: process.env.ARBISCAN_API_KEY || "",
+      customChains: [
+        {
+          network: "arbitrumSepolia",
+          chainId: 421614,
+          urls: {
+            apiURL: "https://api-sepolia.arbiscan.io/api",
+            browserURL: "https://sepolia.arbiscan.io/",
+          },
+        },
+        {
+          network: "bscTestnet",
+          chainId: 97,
+          urls: {
+            apiURL: "https://api-testnet.bscscan.com/api",
+            browserURL: "https://testnet.bscscan.com/",
+          },
+        },
+      ],
     },
-    customChains: [
-      {
-        network: "arbitrumSepolia",
-        chainId: 421614,
-        urls: {
-          apiURL: "https://api-sepolia.arbiscan.io/api",
-          browserURL: "https://sepolia.arbiscan.io/",
-        }
-      }
-    ]
   }
 });
