@@ -1,2 +1,16 @@
 ForgeCapitaFactory: 0x0a7220D944960A6E12Cc91540bC6deCe53e9aC3c
 P2PExchange: 0xd1C058bbFFDb66534c5c20EE24BF17D9Cf576a15
+
+arbitrum sepolia : 
+Deploying contracts with the account: 0x08D3B18508ca976fECc7291c06c30ae15133eB4F
+Account balance: 1.000002879724084 ETH
+1. Deploying Master Implementation Contracts...
+  Master Token deployed to:       0x0a7220D944960A6E12Cc91540bC6deCe53e9aC3c
+  Master Escrow deployed to:      0x9E4223b53e804764A3F940F412FA934267027741
+  Master Distributor deployed to: 0xef90cDA86c3cD8Fb1FE40E0728F7e5D3Bb75D5fC
+  Master Router deployed to:      0x30FE80Bc2BEf4A152DC794CCa3725427E3581749
+
+2. Deploying ForgeCapitaFactory (Proxy Router)...
+  ForgeCapitaFactory deployed to: 0x2f8966e08dD0591FdE5DC712BDcd3Cf1A2650726
+  P2PExchange automatically deployed to: 0x2EaC9cb9B0902F0676f165bB10e2f434Ca5fF595
+root@8ab012da6950:/app# 
