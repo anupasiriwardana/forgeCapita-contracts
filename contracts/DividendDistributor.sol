@@ -25,10 +25,7 @@ contract DividendDistributor is Initializable, ReentrancyGuard {
     event YieldClaimed(address indexed user, uint256 amount);
     event EscrowLinked(address indexed escrow);
 
-    function initialize(
-        address _projectToken,
-        address _factory
-    ) public initializer {
+    function initialize(address _projectToken, address _factory) public initializer {
         projectToken = IERC20(_projectToken);
         factory = _factory;
     }
@@ -54,42 +51,26 @@ contract DividendDistributor is Initializable, ReentrancyGuard {
     }
 
     function getClaimableYield(address account) public view returns (uint256) {
-        return
-            (stakedBalance[account] *
-                (dividendPerToken - userDividendPerTokenPaid[account])) /
-            MAGNIFIER +
-            rewards[account];
+        return (stakedBalance[account] * (dividendPerToken - userDividendPerTokenPaid[account])) / MAGNIFIER + rewards[account];
     }
 
     function stake(uint256 amount) external updateDividend(msg.sender) {
         require(amount > 0, "Cannot stake 0");
         totalStaked += amount;
         stakedBalance[msg.sender] += amount;
-        require(
-            projectToken.transferFrom(msg.sender, address(this), amount),
-            "Token transfer failed"
-        );
+        require(projectToken.transferFrom(msg.sender, address(this), amount), "Token transfer failed");
         emit Staked(msg.sender, amount);
     }
 
     function withdraw(uint256 amount) external updateDividend(msg.sender) {
         require(amount > 0, "Cannot withdraw 0");
-        require(
-            stakedBalance[msg.sender] >= amount,
-            "Insufficient staked balance"
-        );
+        require(stakedBalance[msg.sender] >= amount, "Insufficient staked balance");
         if (milestoneEscrow != address(0)) {
-            require(
-                !IMilestoneEscrow(milestoneEscrow).isUserVoteLocked(msg.sender),
-                "Tokens locked in active milestone vote"
-            );
+            require(!IMilestoneEscrow(milestoneEscrow).isUserVoteLocked(msg.sender), "Tokens locked in active milestone vote");
         }
         totalStaked -= amount;
         stakedBalance[msg.sender] -= amount;
-        require(
-            projectToken.transfer(msg.sender, amount),
-            "Token transfer failed"
-        );
+        require(projectToken.transfer(msg.sender, amount), "Token transfer failed");
         emit Withdrawn(msg.sender, amount);
     }
 

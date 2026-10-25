@@ -31,24 +31,41 @@ export default defineConfig({
     },
   },
   networks: {
-    hardhatMainnet: {
-      type: "edr-simulated",
-      chainType: "l1",
+    hardhat: {
+      type: "edr-simulated"
     },
-    hardhatOp: {
-      type: "edr-simulated",
-      chainType: "op",
-    },
-    sepolia: {
+    arbitrumSepolia: {
       type: "http",
-      chainType: "l1",
-      url: process.env.SEPOLIA_RPC_URL || "",
-      accounts: process.env.SEPOLIA_PRIVATE_KEY ? [process.env.SEPOLIA_PRIVATE_KEY] : [],
+      url: process.env.ARBITRUM_SEPOLIA_RPC || "",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      chainId: 421614,
+    },
+    bscTestnet: {
+      type: "http",
+      url: process.env.BSC_TESTNET_RPC || "https://data-seed-prebsc-1-s1.binance.org:8545",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      chainId: 97,
     },
   },
-  verify: {
-    etherscan: {
-      apiKey: process.env.ETHERSCAN_API_KEY || "",
+  // verify: {
+  //   etherscan: {
+  //     apiKey: process.env.ETHERSCAN_API_KEY || "",
+  //   },
+  // },
+  etherscan: {
+    apiKey: {
+      arbitrumSepolia: process.env.ARBISCAN_API_KEY || "",
+      bscTestnet: process.env.BSCSCAN_API_KEY || "",
     },
-  },
+    customChains: [
+      {
+        network: "arbitrumSepolia",
+        chainId: 421614,
+        urls: {
+          apiURL: "https://api-sepolia.arbiscan.io/api",
+          browserURL: "https://sepolia.arbiscan.io/",
+        }
+      }
+    ]
+  }
 });

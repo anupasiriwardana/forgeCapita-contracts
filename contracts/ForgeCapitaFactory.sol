@@ -13,7 +13,7 @@ contract ForgeCapitaFactory {
     address public immutable masterEscrow;
     address public immutable masterDistributor;
     address public immutable masterRouter;
-
+    
     address payable public immutable forgeCapitaTreasury;
     P2PExchange public immutable p2pExchange;
 
@@ -54,24 +54,15 @@ contract ForgeCapitaFactory {
     ) external returns (address, address, address, address) {
         // 1. Clone & Initialize Token
         address tokenClone = Clones.clone(masterToken);
-        ProjectToken(tokenClone).initialize(
-            _name,
-            _symbol,
-            _totalSupply,
-            address(this)
-        );
-
+        ProjectToken(tokenClone).initialize(_name, _symbol, _totalSupply, address(this));
+        
         // 2. Clone & Initialize Distributor
         address distributorClone = Clones.clone(masterDistributor);
-        DividendDistributor(payable(distributorClone)).initialize(
-            tokenClone,
-            address(this)
-        );
-
+        DividendDistributor(payable(distributorClone)).initialize(tokenClone, address(this));
+        
         // 3. Clone & Initialize Escrow
         address escrowClone = Clones.clone(masterEscrow);
-        uint256 scaledSupply = _totalSupply *
-            10 ** ProjectToken(tokenClone).decimals();
+        uint256 scaledSupply = _totalSupply * 10 ** ProjectToken(tokenClone).decimals();
         MilestoneEscrow(payable(escrowClone)).initialize(
             tokenClone,
             payable(msg.sender),
@@ -93,22 +84,15 @@ contract ForgeCapitaFactory {
         );
 
         // Wire contracts together
-        DividendDistributor(payable(distributorClone)).setMilestoneEscrow(
-            escrowClone
-        );
+        DividendDistributor(payable(distributorClone)).setMilestoneEscrow(escrowClone);
         ProjectToken(tokenClone).transfer(escrowClone, scaledSupply);
 
+        ProjectToken(tokenClone).transferOwnership(escrowClone);
         developerProjects[msg.sender].push(tokenClone);
         allProjects.push(tokenClone);
 
-        emit ProjectLaunched(
-            msg.sender,
-            tokenClone,
-            escrowClone,
-            distributorClone,
-            routerClone
-        );
-
+        emit ProjectLaunched(msg.sender, tokenClone, escrowClone, distributorClone, routerClone);
+        
         return (tokenClone, escrowClone, distributorClone, routerClone);
     }
 
