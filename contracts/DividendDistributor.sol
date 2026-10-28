@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interfaces/IMilestoneEscrow.sol";
@@ -58,11 +59,29 @@ contract DividendDistributor is Initializable, ReentrancyGuard {
     }
 
     function stake(uint256 amount) external updateDividend(msg.sender) {
+        _stake(msg.sender, amount);
+    }
+
+    /// @notice Stakes `owner`'s tokens using their ERC-2612 permit. Callable by anyone (e.g. a relayer).
+    /// A permit that was already consumed (front-run) is tolerated as long as the allowance suffices.
+    function stakeWithPermit(
+        address owner,
+        uint256 amount,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external updateDividend(owner) {
+        try IERC20Permit(address(projectToken)).permit(owner, address(this), amount, deadline, v, r, s) {} catch {}
+        _stake(owner, amount);
+    }
+
+    function _stake(address account, uint256 amount) private {
         require(amount > 0, "Cannot stake 0");
         totalStaked += amount;
-        stakedBalance[msg.sender] += amount;
-        require(projectToken.transferFrom(msg.sender, address(this), amount), "Token transfer failed");
-        emit Staked(msg.sender, amount);
+        stakedBalance[account] += amount;
+        require(projectToken.transferFrom(account, address(this), amount), "Token transfer failed");
+        emit Staked(account, amount);
     }
 
     function withdraw(uint256 amount) external updateDividend(msg.sender) {

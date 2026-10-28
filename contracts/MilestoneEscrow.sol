@@ -6,6 +6,8 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import "./interfaces/IDividendDistributor.sol";
 import "./interfaces/IForgeCapitaRegistry.sol";
 
@@ -14,9 +16,12 @@ interface IProjectToken is IERC20 {
     function burn(uint256 amount) external;
 }
 
-contract MilestoneEscrow is Initializable, ReentrancyGuard {
+contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
+
+    bytes32 private constant VOTE_TYPEHASH =
+        keccak256("Vote(address voter,uint256 milestoneIndex,bool support,uint256 deadline)");
 
     IProjectToken public projectToken;
     IDividendDistributor public dividendDistributor;
@@ -89,6 +94,8 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
         uint256 extractedETH,
         uint256 burnedTokens
     );
+
+    constructor() EIP712("ForgeCapita MilestoneEscrow", "1") {}
 
     function initialize(
         address _projectToken,
@@ -204,36 +211,75 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
     }
 
     function claimTokens() external nonReentrant {
-        require(!isFundingActive, "Funding phase is still active");
-        require(!hasClaimedTokens[msg.sender], "Tokens already claimed");
-        require(deposits[msg.sender] > 0, "No investment found");
+        _claimTokens(msg.sender);
+    }
 
-        hasClaimedTokens[msg.sender] = true;
-        uint256 tokenShare = (deposits[msg.sender] * publicSupply) /
-            totalRaised;
+    /// @notice Permissionless: delivers `account`'s tokens to `account`, never to the caller.
+    function claimTokensFor(address account) external nonReentrant {
+        _claimTokens(account);
+    }
+
+    function _claimTokens(address account) private {
+        require(!isFundingActive, "Funding phase is still active");
+        require(!hasClaimedTokens[account], "Tokens already claimed");
+        require(deposits[account] > 0, "No investment found");
+
+        hasClaimedTokens[account] = true;
+        uint256 tokenShare = (deposits[account] * publicSupply) / totalRaised;
         require(
-            projectToken.transfer(msg.sender, tokenShare),
+            projectToken.transfer(account, tokenShare),
             "Token transfer failed"
         );
     }
 
     function vote(bool support) external nonReentrant {
+        _vote(msg.sender, support);
+    }
+
+    /// @notice Casts `voter`'s vote from an EIP-712 signature (EOA or ERC-1271). Callable by anyone.
+    /// The signed message binds the current milestone index; hasVoted makes it single-use.
+    function voteBySig(
+        address voter,
+        bool support,
+        uint256 deadline,
+        bytes calldata signature
+    ) external nonReentrant {
+        require(block.timestamp <= deadline, "Vote signature expired");
+        bytes32 digest = _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    VOTE_TYPEHASH,
+                    voter,
+                    currentMilestoneIndex,
+                    support,
+                    deadline
+                )
+            )
+        );
+        require(
+            SignatureChecker.isValidSignatureNow(voter, digest, signature),
+            "Invalid vote signature"
+        );
+        _vote(voter, support);
+    }
+
+    function _vote(address voter, bool support) private {
         require(!isFundingActive, "Funding is still active");
         require(!projectCancelled, "Project has been cancelled");
-        require(msg.sender != developer, "Developer cannot vote");
+        require(voter != developer, "Developer cannot vote");
 
         Milestone storage milestone = milestones[currentMilestoneIndex];
         require(milestone.isVotingOpen, "Voting is not open");
-        require(!hasVoted[currentMilestoneIndex][msg.sender], "Already voted");
+        require(!hasVoted[currentMilestoneIndex][voter], "Already voted");
 
-        uint256 voterWeight = dividendDistributor.stakedBalance(msg.sender);
+        uint256 voterWeight = dividendDistributor.stakedBalance(voter);
         require(voterWeight > 0, "No voting power (must stake tokens first)");
 
-        hasVoted[currentMilestoneIndex][msg.sender] = true;
+        hasVoted[currentMilestoneIndex][voter] = true;
         if (support) milestone.yesVotes += voterWeight;
         else milestone.noVotes += voterWeight;
 
-        emit Voted(msg.sender, currentMilestoneIndex, support, voterWeight);
+        emit Voted(voter, currentMilestoneIndex, support, voterWeight);
     }
 
     /**

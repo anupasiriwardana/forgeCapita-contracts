@@ -64,11 +64,16 @@ Users should not pay gas for four actions: **claim tokens, stake, vote, execute 
   Done 2026-10-28: the factory passes the single registry address to escrow, distributor and router (and P2P at construction); roles are read from the registry at call time rather than copied into clones.
 
 ### Signed (gasless) actions
-- [ ] **CON-02.5** EIP-712 domain (name, version, `chainId`, `verifyingContract`) and typed structs for `ClaimTokens`, `Stake`, `Vote`, `ExecuteMilestone`, each with `signer`, `nonce`, `deadline`.
-- [ ] **CON-02.6** Per-signer nonces; reject expired deadlines, reused nonces, wrong chain, wrong contract. Use OpenZeppelin `SignatureChecker` (ECDSA + ERC-1271 so smart wallets can sign) with malleability protection.
-- [ ] **CON-02.7** `claimTokensBySig` — tokens go to the signer, never to the relayer.
-- [ ] **CON-02.8** `ProjectToken` gains ERC-2612 `permit` (respecting `checkValidity` / emergency invalidation) and the distributor gets `stakeBySig` that consumes a permit in the same call, so staking is one signature and needs no separate approval.
-- [ ] **CON-02.9** `voteBySig` — same weight and vote-lock rules as `vote`; the lock applies to the signer; the developer remains barred from voting.
+- [x] **CON-02.5** EIP-712 domain (name, version, `chainId`, `verifyingContract`) and typed structs for `ClaimTokens`, `Stake`, `Vote`, `ExecuteMilestone`, each with `signer`, `nonce`, `deadline`.
+  Done 2026-10-28, differs from the wording: `MilestoneEscrow` inherits OZ `EIP712("ForgeCapita MilestoneEscrow","1")` (domain recomputed per clone). Only `Vote(voter, milestoneIndex, support, deadline)` is a custom struct. No `ClaimTokens` struct (claim needs no signature, `claimTokensFor`), no `Stake` struct (the ERC-2612 permit replaces it), no `ExecuteMilestone` struct (WS-04.5 makes `executeMilestone` parameterless).
+- [x] **CON-02.6** Per-signer nonces; reject expired deadlines, reused nonces, wrong chain, wrong contract. Use OpenZeppelin `SignatureChecker` (ECDSA + ERC-1271 so smart wallets can sign) with malleability protection.
+  Done 2026-10-28, differs from the wording: `SignatureChecker` (ECDSA + ERC-1271, high-s rejected) and deadline checks are in; there is no custom nonce. A vote is single-use through `hasVoted` and bound to the current milestone index; the permit uses the token nonce. Tests cover expired, wrong chain, wrong clone, wrong signer, tampering, replay.
+- [x] **CON-02.7** `claimTokensBySig` — tokens go to the signer, never to the relayer.
+  Done 2026-10-28, differs from the wording: `claimTokensFor(account)` needs no signature and pays the depositor, never the caller (`claimTokensBySig` not built).
+- [x] **CON-02.8** `ProjectToken` gains ERC-2612 `permit` (respecting `checkValidity` / emergency invalidation) and the distributor gets `stakeBySig` that consumes a permit in the same call, so staking is one signature and needs no separate approval.
+  Done 2026-10-28, differs from the wording: `ProjectToken` uses `ERC20PermitUpgradeable` with `permit` guarded by `checkValidity`; the distributor has `stakeWithPermit(owner, amount, deadline, v, r, s)` (try/catch on the permit so a front-run permit is tolerated), not `stakeBySig`. Reporting sponsored gas to the escrow comes with WS-04.5.
+- [x] **CON-02.9** `voteBySig` — same weight and vote-lock rules as `vote`; the lock applies to the signer; the developer remains barred from voting.
+  Done 2026-10-28: `voteBySig(voter, support, deadline, signature)` shares `_vote` with `vote`; weight, lock and developer bar are identical and the lock applies to the signer.
 - [ ] **CON-02.10** `executeMilestone` no longer takes `gasDebt` or a treasury signature (see Gas ledger). Signature-based freeze bypass removed.
 
 ### Gas ledger
