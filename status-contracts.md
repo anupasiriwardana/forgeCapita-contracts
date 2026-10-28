@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary
 
-**v1 is deployed to both testnets and frozen.** v2 (gasless relayer) is **planned, not started**. The v2 plan is in `backlog-contracts.md`. Nothing in `forgecapita-contracts` may be edited until the owner completes CON-00.1.
+**v1 is deployed to both testnets and frozen.** v2 (gasless relayer) is **planned, not started**. The v2 plan is in `backlog-contracts.md`. The freeze was lifted on 2026-10-28 (CON-00.1, CON-00.3 done, verified by hook probes): contracts may be edited, compiled and tested; deployment stays a user action. v1 addresses are recorded in `docs/deployments-v1.md` (CON-00.2, address half). The `v1-testnet` git tag exists. The v2 design draft `docs/v2-design.md` was written and **approved by the user on 2026-10-28** (changes: freeze limits of 45 days per freeze and 90 days cumulative; a per-chain minimum funding goal, section 13). It also lists two apparent v1 bugs (F1: `refundDeadProject` appears callable right after funding closes because `milestoneDeadline` starts at 0; F2: it becomes callable on a completed project) that still need failing tests to confirm.
 
 The user accepted redeploying and re-syncing the indexer, so v2 is a fresh deployment (new factory, implementations, P2P exchange). v1 testnet projects are not migrated.
 
@@ -38,11 +38,12 @@ The user accepted redeploying and re-syncing the indexer, so v2 is a fresh deplo
 
 ## 4. Not yet done
 
-Everything in `backlog-contracts.md` is pending. First blocker: **CON-00.1 (user must lift the freeze)** and the design decisions CON-01.2 to CON-01.7.
+Everything in `backlog-contracts.md` is pending. Design is approved. Next: CON-03.8 (baseline tests and failing F1/F2 tests against the v1 code), then CON-02.18 (registry) and the rest of Phase 2.
 
 ## 5. Summary Checklist of Next Steps
 
-1. [ ] `[USER-ACTION]` CON-00.1 lift the freeze; CON-00.2 tag v1 and record v1 addresses.
-2. [ ] CON-01 design document and decisions.
+1. [x] CON-00.1 freeze lifted; CON-00.3 tracking scope updated.
+   [x] CON-00.2 `v1-testnet` tag created; v1 addresses recorded.
+2. [x] CON-01 design document written and approved (decisions CON-01.2 to CON-01.7 resolved).
 3. [ ] CON-02 implementation, CON-03 tests.
 4. [ ] `[USER-ACTION]` CON-04 deploy to both testnets, fund and allow-list the relayer.
