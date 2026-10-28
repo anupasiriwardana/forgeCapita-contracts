@@ -5,7 +5,16 @@
 **Last Updated:** 2026-10-28
 **Location of this file:** moved here from the workspace root on 2026-10-28.
 
-**Current focus:** Step: WS-04.6 | State: awaiting-review | Updated: 2026-10-28
+**Current focus:** Step: WS-04.7 | State: awaiting-review (Slither is an open `USER-ACTION` before WS-04.8) | Updated: 2026-10-28
+
+## BLOCKED - WS-04.8 (until Slither and two decisions are handled)
+Why: WS-04.7 is done except static analysis, which needs a tool on your machine, and two decisions affect what you set after deployment.
+You need to do:
+1. Install and run Slither (steps in backlog CON-03.6a: `pip install slither-analyzer solc-select`, compile, run `slither` on `forgecapita-contracts`, save the output) and share the findings.
+2. (CON-02.23 resolved 2026-10-28: end-of-call booking with fixed overheads; nothing to decide.)
+3. Decide CON-03.10 (minimum funding goals per chain, from `docs/gas-measurements-v2.md`).
+How to confirm (no secrets in chat): paste the Slither output (no secrets in it) and state your choices.
+Then run: /next-task WS-04.7 (Slither triage), then /next-task WS-04.8
 
 ---
 
@@ -20,6 +29,8 @@
 **Update 2026-10-28 (WS-04.5, awaiting review):** gas ledger and parameterless `executeMilestone()` are in (CON-02.10 to CON-02.14). The treasury-signature path is gone. Ledger `gasBudget`/`gasSpent`/`gasRecovered`, 15% cap (`MAX_DEBT_BPS`), `recordSponsoredGas(relayer, account, action, cost)` (distributor only), events `SponsoredGas`, `GasDebtRecovered`, `GasDebtWrittenOff`. Compile clean; `npm test`: **244 passing, 0 failing**. MilestoneEscrow 14777 bytes. Not deployed; ABI sync is WS-05 (indexer and frontend still hold the old `executeMilestone` ABI). Next: WS-04.6 (freeze).
 
 **Update 2026-10-28 (WS-04.6, awaiting review):** bounded freeze is in (CON-02.15; CON-02.16 and CON-03.3 ticked). `freezeMilestones()` / `unfreezeMilestones()` are guardian-only; a freeze lapses after 45 days (cumulative cap 90 days); only `executeMilestone` is blocked. Compile clean; `npm test`: **267 passing, 0 failing** (244 + 23 in `test/Freeze.ts`). MilestoneEscrow 15983 bytes. Not deployed; ABI sync is WS-05. Next: WS-04.7 (tests, size, static analysis, gas report).
+
+**Update 2026-10-28 (WS-04.7, awaiting review; tests and docs only, `contracts/` unchanged):** coverage, regression, seeded invariant, size and gas-measurement tests added (CON-03.1, 03.2, 03.4, 03.5, 03.9 ticked; CON-03.6 partial). Tracker-verified `npm test`: **316 passing, 0 failing** (267 + 49 new; per-file `it(` counts by grep: 16 SignedActionsCoverage, 11 GasLedgerCoverage, 18 RegressionEdgeCases, 1 Invariants, 2 ContractSizes, 1 GasMeasurement = 49; the per-file counts in dev's report (15/13/22) were wrong, the total is right), 47 s mocha / about 63 s wall. Open: Slither (user action), second reviewer (CON-03.7), and two decisions: ledger under-booking (CON-02.23) and minimum-goal recalibration (CON-03.10). Next: WS-04.8 (deploy, user action) after those.
 
 **Earlier update 2026-10-28 (WS-04.3a, tests only):** a baseline regression suite for all v1 contracts now exists and `npm test` runs `hardhat test`. F1 and F2 are **confirmed** by two failing tests that assert the desired behaviour. No file under `contracts/` was changed. Next: WS-04.3b (registry, factory wiring, F1/F2 fixes).
 
@@ -69,6 +80,19 @@ Tracker-verified: `npx hardhat compile` clean, `npm test` **244 passing, 0 faili
 ## 4c. Test baseline (WS-04.6, 2026-10-28)
 
 Tracker-verified: `npm test` **267 passing, 0 failing** (244 + 23 in `test/Freeze.ts`); `npx hardhat compile` reported nothing to recompile. Sizes re-measured from artifacts (limit 24576): MilestoneEscrow 15983, ProjectToken 6515, DividendDistributor 3977, ForgeCapitaFactory 3283, P2PExchange 2563, RevenueRouter 2294, ForgeCapitaRegistry 1625. Tracker read the freeze code (`MilestoneEscrow.sol` lines 392-429, `executeMilestone` guard) and the Freeze test titles plus the cumulative-cap tests; other test bodies not read.
+
+## 4d. Test baseline (WS-04.7, 2026-10-28)
+
+Tracker-verified: `npx hardhat compile` (nothing to recompile), `npm test` **316 passing, 0 failing**, mocha 47 s, wall about 63 s. `git status` in the contracts repo: only new untracked test files, `docs/gas-measurements-v2.md`, and `docs/v2-design.md` (+2 lines: the "Recalibration pointer" paragraph in section 13; the figures are untouched). `contracts/` unchanged; no existing test file modified. Sizes re-measured by running `test/ContractSizes.ts` (limit 24576, init code limit 49152): MilestoneEscrow 15983, ProjectToken 6515, DividendDistributor 3977, ForgeCapitaFactory 3283, P2PExchange 2563, RevenueRouter 2294, ForgeCapitaRegistry 1625 (test-only `SponsoredGasCost` 57). Anti-vacuity checks by tracker: the size test reads artifacts and throws on non-hex bytecode, and its first test requires every production contract to be found; `Invariants.ts` contains 23 `expect` calls checked after state changes (stake sum equals total staked equals token balance, ledger bounds, etc.). Tracker skimmed Invariants.ts (first 120 lines plus greps), ContractSizes.ts in full and `docs/gas-measurements-v2.md` in full; other new test bodies not read. The measured gas figures were not re-run by the tracker (the doc is consistent with the dev's report and its own arithmetic: 100 x 842,466 + 751,927 = 84,998,527).
+
+### Open findings after WS-04.7
+- RESOLVED 2026-10-28 (CON-02.23): cost is now booked at the end of each relayer call plus fixed overheads. Booked vs actual steady: claim 96.2%, stake 99.0%, vote 97.7%, execute 96.8% non-final / 97.0% final; first-in-project calls lower on purpose (claim 74.2%). `npm test` 316 passing; sizes: MilestoneEscrow 16040, DividendDistributor 4009, Factory 3283, Registry 1625, P2P 2563, ProjectToken 6515, RevenueRouter 2294. Follow-ups CON-03.12 (re-derive surcharges/caps, re-check CON-03.10) and CON-03.13 (recalibrate on gas shifts). Historic text: the ledger under-books relayer cost (gasleft() read early): claim 81%, stake 97%, vote 81%, execute 41% non-final / 30% final of actual gas. With zero surcharges, real platform spend about 85.0M gas vs about 70.9M booked (83%). The ceiling still bounds recoverable amounts; real exposure above it is larger. Options: raise per-action `l1Surcharge` (doc section 5), or contract change to book at end of call.
+- DECISION CON-03.10: minimum-goal recalibration. Measured total 84,998,527 gas (about 15% above the 73.75M assumed in design section 13): about 2.55 BNB at 1 gwei, 7.65 BNB at 3 gwei, 1.52 ETH on Arbitrum Sepolia (prices and the 0.00006 ETH L1 fee are estimates; units measured in-process). FE-53 and API-41 depend on the chosen values. On Arbitrum the L1 fee is about 83% of cost, so `l1Surcharge` must be set.
+- Registry caps `maxCostPerAction` and `l1Surcharge` at 1 ETH each.
+- Dev self-review (not Slither): no issue; low-risk note that `stakeWithPermit` and `claimYield` lack `nonReentrant` (CEI holds). For the second reviewer (CON-03.7 / CON-03.11).
+- ERC-1271 reentrancy is only exercised through the existing mock that re-enters `vote()`.
+- Invariant tests are seeded randomised scenarios (10, seed 20261028), not a fuzzer.
+- Slither not installed; CON-03.6a is a user action. CON-03.7 (second reviewer) not done.
 
 ### Open findings after WS-04.6
 - No security issue found. Checked: guardian-only via `registry.guardian()` (follows rotation); a freeze cannot be extended (`Already frozen`); total never exceeds 90 days (settle lapsed freeze, require settled < 90, duration clamped); state is written before the event; `isFrozen()` is referenced only by `executeMilestone` and the freeze functions, so cancel, refund, shutdown, vote, stake and claims are unaffected.
@@ -129,12 +153,16 @@ Verified by running `npm test` (`hardhat test`): **144 passing, 2 failing** (146
    [ ] CON-04.0 update Ignition modules and `scripts/` for the registry and new initializers (WS-04.8, user-run).
 5. [x] CON-02.10 to CON-02.14 gas ledger and parameterless `executeMilestone` (WS-04.5, awaiting review).
    [x] CON-02.15, CON-02.16, CON-03.3 freeze and regression (WS-04.6, awaiting review).
-   [ ] Remaining: CON-03.1 to CON-03.7 and CON-03.9 (WS-04.7).
+   [x] CON-03.1, 03.2, 03.4, 03.5, 03.9 (WS-04.7, awaiting review); CON-03.6 size gate and gas report done.
+   [ ] `[USER-ACTION]` CON-03.6a Slither; CON-03.7 second reviewer; CON-03.10 decision. CON-02.23 resolved 2026-10-28; CON-03.12 and CON-03.13 added.
 6. [ ] `[USER-ACTION]` CON-04 deploy to both testnets, fund and allow-list the relayer.
 
 ---
 
 ## Change log
+
+2026-10-28  WS-04.7 (CON-02.23)  Contracts: `SponsoredGasCost.cost()` takes an overhead argument with named constants; claim/vote/stake book at end of call; `executeMilestone` books after computing `isFinalMilestone`, before state changes, with fixed payout-tail constants; `stakeWithPermit` passes STAKE_OVERHEAD; ABI unchanged; CON-02.23 resolved, CON-03.12/03.13 added  - verified by: tracker ran compile and `npm test` (316 passing, 0 failing), read the source diff, bytecode sizes from artifacts match (MilestoneEscrow 16040)
+2026-10-28  WS-04.7  Tests and docs only: `test/helpers/extra.ts`, `SignedActionsCoverage.ts`, `GasLedgerCoverage.ts`, `RegressionEdgeCases.ts`, `Invariants.ts`, `ContractSizes.ts`, `GasMeasurement.ts` (49 new tests), `docs/gas-measurements-v2.md`, pointer paragraph in `docs/v2-design.md` section 13; CON-03.1, 03.2, 03.4, 03.5, 03.9 ticked, CON-03.6 partial (size gate done); new items CON-03.6a (user: Slither), CON-02.23 (decision: ledger under-booking), CON-03.10 (decision: minimum goals), CON-03.11 (reviewer note)  - verified by: tracker re-ran `npx hardhat compile` and `npm test` (316 passing, 0 failing, 47 s), re-ran the size test, `git status` shows `contracts/` unchanged and no tracked test modified, read ContractSizes.ts, the head of Invariants.ts and the gas doc; gas numbers not re-run
 
 2026-10-28  WS-04.6  `MilestoneEscrow` freeze: `MAX_FREEZE_DURATION` 45 days, `MAX_TOTAL_FREEZE` 90 days, `freezeStart`/`frozenUntil`/`totalFrozen`, `isFrozen()`, guardian-only `freezeMilestones()`/`unfreezeMilestones()`, events `MilestonesFrozen(until, totalFrozen)` / `MilestonesUnfrozen(totalFrozen)`, `executeMilestone` reverts "Milestones frozen"; `test/Freeze.ts` (23 tests); CON-02.15, CON-02.16, CON-03.3 ticked  - verified by: tracker re-ran `npm test` (267 passing, 0 failing; compile had nothing to recompile), re-measured artifact sizes (MilestoneEscrow 15983), read the freeze code and the cap/clamp tests; other test bodies and the full diff not read
 

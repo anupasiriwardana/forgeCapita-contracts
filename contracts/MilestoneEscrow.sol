@@ -260,7 +260,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
     function claimTokensFor(address account) external nonReentrant {
         uint256 gasAtEntry = gasleft();
         _claimTokens(account);
-        _recordGas(account, ACTION_CLAIM, gasAtEntry);
+        _recordGas(account, ACTION_CLAIM, gasAtEntry, SponsoredGasCost.CLAIM_OVERHEAD);
     }
 
     function _claimTokens(address account) private {
@@ -306,7 +306,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
             "Invalid vote signature"
         );
         _vote(voter, support);
-        _recordGas(voter, ACTION_VOTE, gasAtEntry);
+        _recordGas(voter, ACTION_VOTE, gasAtEntry, SponsoredGasCost.VOTE_OVERHEAD);
     }
 
     function _vote(address voter, bool support) private {
@@ -352,13 +352,20 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
             "Milestone approval conditions not met"
         );
 
-        // Record this call's own cost first so it is part of the deduction below.
-        _recordGas(address(0), ACTION_EXECUTE, gasAtEntry);
+        bool isFinalMilestone = (index == milestones.length - 1);
+
+        // The deduction below must include this call's own cost, but the payouts run after it, so the
+        // payout work is covered by fixed overhead constants instead of being measured (design section 5).
+        _recordGas(
+            address(0),
+            ACTION_EXECUTE,
+            gasAtEntry,
+            SponsoredGasCost.EXECUTE_OVERHEAD + (isFinalMilestone ? SponsoredGasCost.EXECUTE_FINAL_EXTRA : 0)
+        );
 
         milestone.isExecuted = true;
         milestone.isVotingOpen = false;
 
-        bool isFinalMilestone = (index == milestones.length - 1);
         currentMilestoneIndex = index + 1;
 
         uint256 ethToRelease = (netFunds * milestone.unlockPercentage) / 100;
@@ -456,13 +463,13 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
     }
 
     /// @dev Records the cost of the current call only when it comes from an allow-listed relayer.
-    function _recordGas(address account, uint8 action, uint256 gasAtEntry) private {
+    function _recordGas(address account, uint8 action, uint256 gasAtEntry, uint256 overhead) private {
         if (!registry.isRelayer(msg.sender)) return;
         _bookGas(
             msg.sender,
             account,
             action,
-            SponsoredGasCost.cost(registry, action, gasAtEntry, msg.data.length)
+            SponsoredGasCost.cost(registry, action, gasAtEntry, msg.data.length, overhead)
         );
     }
 

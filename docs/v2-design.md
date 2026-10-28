@@ -88,9 +88,11 @@ gasRecovered  += amount deducted from milestone payouts
 Cost of one sponsored action (only recorded when `msg.sender` is an allow-listed relayer):
 
 ```
-used = gasAtEntry - gasleft() + 21000 + 16 * msg.data.length   // calldata bound
+used = gasAtEntry - gasleft() + overhead(action) + 21000 + 16 * msg.data.length   // calldata bound
 cost = min(used * tx.gasprice + l1Surcharge(action), maxCostPerAction)
 ```
+
+Measurement approach (CON-02.23): `gasleft()` is read at the very end of `claimTokensFor`, `voteBySig` and `stakeWithPermit`, after all state changes and external calls, so the measured part covers the whole body. `overhead(action)` is a named constant in `SponsoredGasCost` (`CLAIM_OVERHEAD`, `VOTE_OVERHEAD`, `STAKE_OVERHEAD`) for the work that cannot be measured from inside the call: dispatcher and reentrancy-guard entry, the cost lookups, the booking write, the event and the exit. The constants are calibrated against the steady-state measurements and are lower bounds, so booked gas does not exceed the gas actually paid. `executeMilestone` must know its cost before computing the deduction, yet the payouts run after the deduction. It therefore measures up to the booking point and adds a fixed constant for the payout tail (`EXECUTE_OVERHEAD`, plus `EXECUTE_FINAL_EXTRA` for the final milestone, which vests tokens and emits `ProjectCompleted`). This keeps the cost inside the same call and the deduction exact, depends on no user-controlled input, and leaves the ledger monotonic; booking the cost into the next settlement was rejected because the final milestone has no next settlement. Constants are fixed values, so a code change that shifts gas moves booked versus actual; `test/GasMeasurement.ts` fails if booked exceeds actual or falls below 95% of actual (70% for first-in-project calls, which pay one-off cold and first-write costs). Rare paths that cost less than the calibrated case (for example a claim to an account that already holds tokens) can be booked slightly above actual; the per-action cap and the 15% recovery cap still bound this.
 
 Ceiling that bounds the platform's exposure: a sponsored call **reverts** when `gasSpent + cost > gasBudget + netFunds * MAX_DEBT_BPS / 10_000`, so everything the platform ever spends on a project is recoverable (total deductions across milestones are at most 15% of `netFunds`). The API then tells the user to self-pay. Direct (non-relayer) calls never touch the ledger. Before funding closes the ceiling is 0, so costly relayer calls revert with "Gas ceiling exceeded". Registry `maxCostPerAction` and `l1Surcharge` default to 0 and must be set by the guardian at deployment, together with allow-listing the relayer.
 
@@ -186,6 +188,8 @@ Illustrative gas-unit estimates (to be replaced by measured values from the gas 
 |---|---|---|---|---|
 | BSC Testnet | 1 gwei gas price, no L1 fee | 0.074 BNB | 0.11 BNB | about 2.2 BNB (about 6.6 BNB at 3 gwei) |
 | Arbitrum Sepolia | 0.1 gwei L2 gas price (0.0074 ETH) plus about 0.00006 ETH L1 data fee per transaction (about 0.045 ETH) | 0.052 ETH | 0.079 ETH | about 1.6 ETH |
+
+**Recalibration pointer (added with WS-04.7, 2026-10-28; the figures in this section are left unchanged):** the gas units are now measured, giving about 85.0M gas per project instead of 73.75M, and minimum goals of about 2.55 BNB (1 gwei), 7.65 BNB (3 gwei) and 1.52 ETH (Arbitrum Sepolia). The measurements also show the ledger under-books sponsored cost (most for execute). See [gas-measurements-v2.md](gas-measurements-v2.md). Gas prices and the L1 fee remain estimates.
 
 These are estimates, not measurements. Gas prices move and the Arbitrum L1 data fee dominates its cost, which is why the registry has a flat `l1Surcharge`. The minimum is a per-chain **configuration value** (native coin), recalibrated from the measured gas units and the API gas oracle's 24-hour average, not a constant baked into code. Testnet minimums may be set lower to make testing possible with faucet funds.
 

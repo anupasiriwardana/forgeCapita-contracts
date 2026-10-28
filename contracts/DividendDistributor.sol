@@ -90,7 +90,7 @@ contract DividendDistributor is Initializable, ReentrancyGuard {
                 msg.sender,
                 owner,
                 ACTION_STAKE,
-                SponsoredGasCost.cost(registry, ACTION_STAKE, gasAtEntry, msg.data.length)
+                SponsoredGasCost.cost(registry, ACTION_STAKE, gasAtEntry, msg.data.length, SponsoredGasCost.STAKE_OVERHEAD)
             );
         }
     }
