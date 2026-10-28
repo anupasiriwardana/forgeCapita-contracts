@@ -7,6 +7,7 @@ import "./MilestoneEscrow.sol";
 import "./DividendDistributor.sol";
 import "./RevenueRouter.sol";
 import "./P2PExchange.sol";
+import "./interfaces/IForgeCapitaRegistry.sol";
 
 contract ForgeCapitaFactory {
     address public immutable masterToken;
@@ -14,7 +15,7 @@ contract ForgeCapitaFactory {
     address public immutable masterDistributor;
     address public immutable masterRouter;
     
-    address payable public immutable forgeCapitaTreasury;
+    IForgeCapitaRegistry public immutable registry;
     P2PExchange public immutable p2pExchange;
 
     mapping(address => address[]) public developerProjects;
@@ -33,14 +34,19 @@ contract ForgeCapitaFactory {
         address _masterEscrow,
         address _masterDistributor,
         address _masterRouter,
-        address payable _treasury
+        address _registry
     ) {
         masterToken = _masterToken;
         masterEscrow = _masterEscrow;
         masterDistributor = _masterDistributor;
         masterRouter = _masterRouter;
-        forgeCapitaTreasury = _treasury;
-        p2pExchange = new P2PExchange(_treasury);
+        registry = IForgeCapitaRegistry(_registry);
+        p2pExchange = new P2PExchange(_registry);
+    }
+
+    /// @notice Fee recipient, read from the registry so it follows treasury rotation.
+    function forgeCapitaTreasury() external view returns (address payable) {
+        return registry.treasury();
     }
 
     function launchProject(
@@ -58,7 +64,7 @@ contract ForgeCapitaFactory {
         
         // 2. Clone & Initialize Distributor
         address distributorClone = Clones.clone(masterDistributor);
-        DividendDistributor(payable(distributorClone)).initialize(tokenClone, address(this));
+        DividendDistributor(payable(distributorClone)).initialize(tokenClone, address(this), address(registry));
         
         // 3. Clone & Initialize Escrow
         address escrowClone = Clones.clone(masterEscrow);
@@ -71,7 +77,7 @@ contract ForgeCapitaFactory {
             _milestonePercentages,
             _fundingGoal,
             _fundingDurationDays,
-            forgeCapitaTreasury,
+            address(registry),
             distributorClone
         );
 
@@ -80,7 +86,7 @@ contract ForgeCapitaFactory {
         RevenueRouter(payable(routerClone)).initialize(
             escrowClone,
             payable(distributorClone),
-            forgeCapitaTreasury
+            address(registry)
         );
 
         // Wire contracts together

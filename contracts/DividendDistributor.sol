@@ -5,11 +5,13 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interfaces/IMilestoneEscrow.sol";
+import "./interfaces/IForgeCapitaRegistry.sol";
 
 contract DividendDistributor is Initializable, ReentrancyGuard {
     IERC20 public projectToken;
     address public factory;
     address public milestoneEscrow;
+    IForgeCapitaRegistry public registry;
 
     uint256 public totalStaked;
     uint256 public dividendPerToken;
@@ -25,9 +27,10 @@ contract DividendDistributor is Initializable, ReentrancyGuard {
     event YieldClaimed(address indexed user, uint256 amount);
     event EscrowLinked(address indexed escrow);
 
-    function initialize(address _projectToken, address _factory) public initializer {
+    function initialize(address _projectToken, address _factory, address _registry) public initializer {
         projectToken = IERC20(_projectToken);
         factory = _factory;
+        registry = IForgeCapitaRegistry(_registry);
     }
 
     function setMilestoneEscrow(address _milestoneEscrow) external {

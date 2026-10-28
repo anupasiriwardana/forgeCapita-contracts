@@ -7,6 +7,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import "./interfaces/IDividendDistributor.sol";
+import "./interfaces/IForgeCapitaRegistry.sol";
 
 interface IProjectToken is IERC20 {
     function emergencyInvalidate() external;
@@ -22,7 +23,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
 
     address payable public developer;
     address payable public pendingDeveloper;
-    address payable public forgeCapitaTreasury;
+    IForgeCapitaRegistry public registry;
 
     uint256 public publicSupply;
     uint256 public developerSupply;
@@ -32,12 +33,11 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
 
     bool public isFundingActive;
     bool public projectCancelled;
+    bool public completed;
 
     uint256 public fundingGoal;
     uint256 public fundingDeadline;
-    uint256 public milestoneDeadline;
 
-    uint256 public constant MAX_INACTIVITY_PERIOD = 120 days;
     uint256 public constant PLATFORM_FEE_PERCENT = 5;
     uint256 public constant VOTING_PERIOD = 28 days;
     uint256 public constant QUORUM_PERCENT = 20;
@@ -74,6 +74,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
         uint256 gasDebtRecouped
     );
     event ProjectCancelled(string reason);
+    event ProjectCompleted();
     event RefundClaimed(address indexed backer, uint256 amount);
     event PlatformFeeCollected(uint256 amount);
     event DeveloperTransferProposed(
@@ -97,13 +98,13 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
         uint256[] memory _milestonePercentages,
         uint256 _fundingGoal,
         uint256 _fundingDurationDays,
-        address payable _treasury,
+        address _registry,
         address _dividendDistributor
     ) public initializer {
         projectToken = IProjectToken(_projectToken);
         developer = _developer;
         dividendDistributor = IDividendDistributor(_dividendDistributor);
-        forgeCapitaTreasury = _treasury;
+        registry = IForgeCapitaRegistry(_registry);
 
         developerSupply = (_totalTokenSupply * 20) / 100;
         publicSupply = _totalTokenSupply - developerSupply;
@@ -159,6 +160,11 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
         emit DepositReceived(msg.sender, msg.value);
     }
 
+    /// @notice Fee recipient, read from the registry so it follows treasury rotation.
+    function forgeCapitaTreasury() public view returns (address payable) {
+        return registry.treasury();
+    }
+
     function closeFundingAndStart() external {
         require(msg.sender == developer, "Only developer can call");
         require(isFundingActive, "Already closed");
@@ -173,7 +179,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
         uint256 fee = (totalRaised * PLATFORM_FEE_PERCENT) / 100;
         netFunds = totalRaised - fee;
 
-        (bool feeSuccess, ) = forgeCapitaTreasury.call{value: fee}("");
+        (bool feeSuccess, ) = forgeCapitaTreasury().call{value: fee}("");
         require(feeSuccess, "Fee transfer failed");
         emit PlatformFeeCollected(fee);
     }
@@ -194,10 +200,6 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
 
         milestones[index].isVotingOpen = true;
         milestones[index].votingStartTime = block.timestamp;
-
-        if (index == 0) {
-            milestoneDeadline = block.timestamp + MAX_INACTIVITY_PERIOD;
-        }
         emit VotingStarted(index);
     }
 
@@ -244,10 +246,6 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
         bytes calldata signature
     ) external nonReentrant {
         require(!projectCancelled, "Project cancelled");
-        require(
-            block.timestamp <= milestoneDeadline,
-            "Milestone deadline passed. Project in deadlock."
-        );
 
         Milestone storage milestone = milestones[currentMilestoneIndex];
         require(milestone.isVotingOpen, "Voting is not open");
@@ -276,7 +274,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
         bytes32 ethSignedMessageHash = messageHash.toEthSignedMessageHash();
         address recoveredSigner = ethSignedMessageHash.recover(signature);
         require(
-            recoveredSigner == forgeCapitaTreasury,
+            recoveredSigner == forgeCapitaTreasury(),
             "Invalid gas debt signature"
         );
 
@@ -291,9 +289,9 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
         bool isFinalMilestone = (currentMilestoneIndex ==
             milestones.length - 1);
         currentMilestoneIndex++;
-
-        if (currentMilestoneIndex < milestones.length) {
-            milestoneDeadline = block.timestamp + MAX_INACTIVITY_PERIOD;
+        if (isFinalMilestone) {
+            completed = true;
+            emit ProjectCompleted();
         }
 
         uint256 tokensVested = 0;
@@ -307,7 +305,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
 
         // Pay the Treasury its recouped gas debt first
         if (gasDebt > 0) {
-            (bool debtSuccess, ) = forgeCapitaTreasury.call{value: gasDebt}("");
+            (bool debtSuccess, ) = forgeCapitaTreasury().call{value: gasDebt}("");
             require(debtSuccess, "Treasury debt transfer failed");
         }
 
@@ -328,7 +326,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
     function isUserVoteLocked(address account) external view returns (bool) {
         if (
             projectCancelled ||
-            block.timestamp > milestoneDeadline ||
+            completed ||
             currentMilestoneIndex >= milestones.length
         ) {
             return false;
@@ -355,18 +353,21 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
     }
 
     function cancelProject(string calldata reason) external {
-        require(msg.sender == developer, "Only developer can cancel");
+        require(
+            msg.sender == developer || msg.sender == registry.guardian(),
+            "Only developer or Guardian can cancel"
+        );
         require(!isFundingActive, "Funding still active");
+        require(!projectCancelled, "Project already cancelled");
+        require(!completed, "Project is completed");
         projectCancelled = true;
         emit ProjectCancelled(reason);
     }
 
     function refundDeadProject() external nonReentrant {
         require(!isFundingActive, "Crowdfunding still active");
-        require(
-            projectCancelled || block.timestamp > milestoneDeadline,
-            "Project is still healthy"
-        );
+        require(!completed, "Project is completed");
+        require(projectCancelled, "Project is not cancelled");
         require(msg.sender != developer, "Developer cannot claim refund");
 
         uint256 userTokens = projectToken.balanceOf(msg.sender);
@@ -391,8 +392,8 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
 
     function proposeNewDeveloper(address payable _newDeveloper) external {
         require(
-            msg.sender == developer || msg.sender == forgeCapitaTreasury,
-            "Only active dev or Treasury can propose"
+            msg.sender == developer || msg.sender == registry.guardian(),
+            "Only active dev or Guardian can propose"
         );
         require(_newDeveloper != address(0), "Cannot transfer to zero address");
         pendingDeveloper = _newDeveloper;
@@ -411,12 +412,12 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
     }
 
     /**
-     * @dev Emergency Circuit Breaker. Called by Treasury to freeze operations, extract capital, and globally invalidate tokens.
+     * @dev Emergency Circuit Breaker. Called by the Guardian to freeze operations, extract capital, and globally invalidate tokens.
      */
     function emergencyShutdown() external nonReentrant {
         require(
-            msg.sender == forgeCapitaTreasury,
-            "Only Treasury can trigger emergency shutdown"
+            msg.sender == registry.guardian(),
+            "Only Guardian can trigger emergency shutdown"
         );
         require(!projectCancelled, "Project already cancelled");
 
@@ -435,9 +436,9 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard {
         // 3. Extract remaining ETH to Treasury
         uint256 remainingETH = address(this).balance;
         if (remainingETH > 0) {
-            (bool success, ) = forgeCapitaTreasury.call{value: remainingETH}(
-                ""
-            );
+            (bool success, ) = forgeCapitaTreasury().call{
+                value: remainingETH
+            }("");
             require(success, "Emergency ETH extraction failed");
         }
 

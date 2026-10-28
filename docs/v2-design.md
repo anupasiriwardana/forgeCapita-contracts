@@ -28,8 +28,8 @@ Non-goals: ERC-4337 / EIP-7702 sponsorship, upgradeable proxies, changing the 5%
 
 | # | Finding | Why it matters | v2 fix |
 |---|---|---|---|
-| F1 | `milestoneDeadline` is `0` until `startMilestone(0)` runs. `refundDeadProject` requires `projectCancelled \|\| block.timestamp > milestoneDeadline`, so it appears callable **as soon as funding closes**. | Backers can pull their pro-rata share back before the developer has even started milestone 0, and the escrow is drained while the project is "healthy". | Start the 120-day clock in `closeFundingAndStart`. |
-| F2 | After the **final** milestone executes, `milestoneDeadline` is not cleared. 120 days later `refundDeadProject` is callable on a **completed** project; a holder who calls it surrenders tokens for roughly zero ETH. | Footgun for investors; also affects `isUserVoteLocked`. | Add a `completed` flag set at the final milestone; `refundDeadProject` and the deadline checks require `!completed`. |
+| F1 | `milestoneDeadline` is `0` until `startMilestone(0)` runs. `refundDeadProject` requires `projectCancelled \|\| block.timestamp > milestoneDeadline`, so it appears callable **as soon as funding closes**. | Backers can pull their pro-rata share back before the developer has even started milestone 0, and the escrow is drained while the project is "healthy". | Superseded 2026-10-28: the 120-day deadline is removed entirely, so `refundDeadProject` requires `projectCancelled`. |
+| F2 | After the **final** milestone executes, `milestoneDeadline` is not cleared. 120 days later `refundDeadProject` is callable on a **completed** project; a holder who calls it surrenders tokens for roughly zero ETH. | Footgun for investors; also affects `isUserVoteLocked`. | Add a `completed` flag set at the final milestone; `refundDeadProject` requires `!completed` (the deadline checks no longer exist). |
 | F3 | Treasury, relayer-like roles cannot be rotated (see section 2). | Key compromise or key loss is permanent for every project. | Shared registry with two-step rotation (section 4). |
 | F4 | `P2PExchange.treasury` is immutable and independent of the factory registry. | Same as F3 for secondary-market fees. | Read treasury from the registry. |
 | F5 | Hardhat config loads `PRIVATE_KEY` and RPC URLs from `.env` via `dotenv`. | Every `hardhat compile` / `test` loads the deployer key into the process. | Use Hardhat's keystore / `configVariable` for the deployer key before the v2 deployment `[USER-ACTION]`. |
@@ -111,11 +111,11 @@ At the final milestone any `outstanding` left after the deduction is **written o
 
 `freezeMilestones()` / `unfreezeMilestones()` (guardian only, events). While frozen, `executeMilestone()` reverts; voting, staking, refunds and `emergencyShutdown` keep working.
 
-The 120-day inactivity clock **pauses** during a freeze: every deadline check uses `effectiveDeadline = milestoneDeadline + frozenElapsed`, where `frozenElapsed = min(now, frozenAt + 45 days) - frozenAt` while a freeze is active, and `unfreezeMilestones()` adds the frozen time to `milestoneDeadline`. Without this a long freeze would push a founder into a deadlock they did not cause.
+The 120-day inactivity deadline was removed on 2026-10-28 (section 12), so a freeze needs no clock pause. A freeze only blocks `executeMilestone()`.
 
 **Decision (2026-10-28, limits chosen by the assistant at the user's request): a freeze is bounded.** Each freeze lapses automatically after 45 days (`MAX_FREEZE_DURATION`), the admin can unfreeze earlier with `unfreezeMilestones()`, and total freeze time per project is capped at 90 days (`MAX_TOTAL_FREEZE`); after that `freezeMilestones()` reverts. Why these numbers: the compliance process (a warning, 14 days to escalation, a decision, and a possible takeover signalling vote and handover) fits inside 45 days, and the 90-day cap stops serial re-freezing from holding payouts indefinitely. They are contract constants, so changing them needs a redeploy. After the cap the remedies are the existing ones: shutdown, takeover, or letting the project continue.
 
-The clock pause covers only the frozen time actually elapsed (up to the lapse). Residual risk: during a freeze investors cannot use `refundDeadProject` because the clock is paused, but no single freeze can last more than 45 days, so a lost or unresponsive admin key can no longer hold a project frozen forever. The developer can still call `cancelProject` and the admin can still call `emergencyShutdown` while frozen. The guardian key should still be a hardware wallet now and a multisig later (CON-05.2).
+Residual risk: no single freeze can last more than 45 days, so a lost or unresponsive admin key can no longer hold a project frozen forever. The developer can still call `cancelProject` and the admin can still call `emergencyShutdown` while frozen. The guardian key should still be a hardware wallet now and a multisig later (CON-05.2).
 
 ## 7. Events and ABI changes (indexer impact)
 
@@ -140,13 +140,13 @@ New events: `SponsoredGas(relayer, account, action, cost, gasSpent)`, `GasDebtRe
 | CON-01.2 | `BySig` functions or an ERC-2771 forwarder? | Per-function entry points. Only two need a signature (vote, permit); claim and execute need none. Smaller surface, no trusted forwarder. |
 | CON-01.3 | Gas measurement and the Arbitrum L1 fee | Measure `gasleft()` plus a calldata bound, times `tx.gasprice`, plus a flat guardian-set `l1Surcharge`, capped per action. Revisit the ArbGasInfo precompile later if the flat surcharge proves inaccurate. |
 | CON-01.4 | Overflow left after the final milestone | Write it off; do not touch the 20% developer tokens. |
-| CON-01.5 | Does a freeze pause the inactivity clock? | Yes (section 6); 45 days per freeze (automatic lapse), 90 days cumulative per project. |
+| CON-01.5 | Does a freeze pause the inactivity clock? | Moot: the deadline was removed. Freeze limits kept: 45 days per freeze (automatic lapse), 90 days cumulative per project. |
 | CON-01.6 | Who may execute? | Anyone, once executable and not frozen. |
 | CON-01.7 | Per-action cap and rate limit | Per-action cap in the registry; project ceiling from section 5; per-wallet rate limits live in the API, not on-chain. |
 
 ## 10. Test plan (summary of CON-03)
 
-Write regression tests for all v1 behaviour first (there are none for escrow, distributor, token, factory, P2P), including failing tests for F1 and F2. Then: signature validity (valid, expired, wrong chain/contract/signer, ERC-1271 wallet, replay), ledger maths (under budget, at budget, overflow, 15% cap over several milestones, final-milestone write-off, ceiling revert, relayer removed mid-project), freeze (blocks execute, pauses the clock only for the elapsed frozen time, lapses after 45 days, 90-day cumulative cap, early unfreeze, refunds via `cancelProject` and shutdown still work), registry rotation, fuzz/invariants, contract size under 24 KB, gas report, Slither.
+Write regression tests for all v1 behaviour first (there are none for escrow, distributor, token, factory, P2P), including failing tests for F1 and F2. Then: signature validity (valid, expired, wrong chain/contract/signer, ERC-1271 wallet, replay), ledger maths (under budget, at budget, overflow, 15% cap over several milestones, final-milestone write-off, ceiling revert, relayer removed mid-project), freeze (blocks execute, lapses after 45 days, 90-day cumulative cap, early unfreeze, refunds via `cancelProject` and shutdown still work), registry rotation, fuzz/invariants, contract size under 24 KB, gas report, Slither.
 
 ## 11. Impact on other repos
 
@@ -162,6 +162,9 @@ Write regression tests for all v1 behaviour first (there are none for escrow, di
 4. **Final-milestone write-off:** approved, together with a minimum funding goal per chain so that 5% covers the sponsored gas (section 13).
 5. **F1 and F2:** approved. Fix both in v2 and write the failing tests first.
 6. **On-chain launch approval:** not added. Rogue-deployment detection stays off-chain.
+7. **120-day deadline removed (2026-10-28):** `MAX_INACTIVITY_PERIOD` and `milestoneDeadline` no longer exist; a hardcoded limit is wrong for large projects. `refundDeadProject` now requires `projectCancelled`. A stalled developer is handled by the guardian (`emergencyShutdown` or `proposeNewDeveloper`). CON-02.21 (late start) is therefore not applicable. Consequence: investors have no permissionless exit unless the developer calls `cancelProject`, and voters stay vote-locked while a vote is open on a stalled project.
+8. **Shutdown of a completed project:** the guardian may still `emergencyShutdown` a completed project.
+9. **Guardian cancel (2026-10-28):** `cancelProject` is callable by the developer or the registry guardian, so a stalled project can be cancelled by the admin and investors refund pro-rata through `refundDeadProject` without the ETH being swept to the treasury. `cancelProject` now reverts if the project is already cancelled (including after `emergencyShutdown`) or completed. The `ProjectCancelled(string)` event is unchanged and does not record who cancelled. Stakers must withdraw from the distributor before refunding.
 
 ## 13. Minimum funding goal per chain
 

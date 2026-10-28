@@ -5,11 +5,12 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interfaces/IDividendDistributor.sol";
 import "./interfaces/IMilestoneEscrow.sol";
+import "./interfaces/IForgeCapitaRegistry.sol";
 
 contract RevenueRouter is Initializable, ReentrancyGuard {
     address public milestoneEscrow;
     address payable public dividendDistributor;
-    address payable public forgeCapitaTreasury;
+    IForgeCapitaRegistry public registry;
 
     uint256 public creatorPendingFunds;
     uint256 public treasuryPendingFunds;
@@ -20,11 +21,16 @@ contract RevenueRouter is Initializable, ReentrancyGuard {
     function initialize(
         address _milestoneEscrow,
         address payable _dividendDistributor,
-        address payable _treasury
+        address _registry
     ) public initializer {
         milestoneEscrow = _milestoneEscrow;
         dividendDistributor = _dividendDistributor;
-        forgeCapitaTreasury = _treasury;
+        registry = IForgeCapitaRegistry(_registry);
+    }
+
+    /// @notice Fee recipient, read from the registry so it follows treasury rotation.
+    function forgeCapitaTreasury() public view returns (address payable) {
+        return registry.treasury();
     }
 
     function routePayment() public payable {
@@ -63,9 +69,10 @@ contract RevenueRouter is Initializable, ReentrancyGuard {
         uint256 amount = treasuryPendingFunds;
         require(amount > 0, "No funds to claim");
         
+        address payable currentTreasury = forgeCapitaTreasury();
         treasuryPendingFunds = 0;
-        (bool success, ) = forgeCapitaTreasury.call{value: amount}("");
+        (bool success, ) = currentTreasury.call{value: amount}("");
         require(success, "ETH transfer failed");
-        emit FundsClaimed(forgeCapitaTreasury, amount);
+        emit FundsClaimed(currentTreasury, amount);
     }
 }

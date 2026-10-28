@@ -3,9 +3,10 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "./interfaces/IForgeCapitaRegistry.sol";
 
 contract P2PExchange is ReentrancyGuard {
-    address payable public immutable treasury;
+    IForgeCapitaRegistry public immutable registry;
     uint256 public constant PROTOCOL_FEE_BPS = 100; // 1% fee (100 / 10,000)
 
     struct Listing {
@@ -34,8 +35,13 @@ contract P2PExchange is ReentrancyGuard {
     );
     event ListingCancelled(uint256 indexed listingId, address indexed seller);
 
-    constructor(address payable _treasury) {
-        treasury = _treasury;
+    constructor(address _registry) {
+        registry = IForgeCapitaRegistry(_registry);
+    }
+
+    /// @notice Fee recipient, read from the registry so it follows treasury rotation.
+    function treasury() public view returns (address payable) {
+        return registry.treasury();
     }
 
     function createListing(
@@ -84,7 +90,7 @@ contract P2PExchange is ReentrancyGuard {
         uint256 fee = (msg.value * PROTOCOL_FEE_BPS) / 10000;
         uint256 sellerProceeds = msg.value - fee;
 
-        (bool feeSuccess, ) = treasury.call{value: fee}("");
+        (bool feeSuccess, ) = treasury().call{value: fee}("");
         require(feeSuccess, "Treasury transfer failed");
 
         (bool sellerSuccess, ) = payable(item.seller).call{
