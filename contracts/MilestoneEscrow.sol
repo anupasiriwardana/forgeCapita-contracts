@@ -45,6 +45,10 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
     /// @notice Cap, in basis points of netFunds, on total sponsored gas the project can owe beyond the budget,
     /// and on the share of any single milestone payout that can be deducted to repay it.
     uint256 public constant MAX_DEBT_BPS = 1500;
+    /// @notice Longest single freeze; it lapses on its own, no transaction needed.
+    uint256 public constant MAX_FREEZE_DURATION = 45 days;
+    /// @notice Cap on the cumulative time a project can ever be frozen.
+    uint256 public constant MAX_TOTAL_FREEZE = 90 days;
 
     /// @dev Registry action kinds (Claim, Stake, Vote, Execute = 0..3).
     uint8 private constant ACTION_CLAIM = 0;
@@ -70,6 +74,13 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
 
     Milestone[] public milestones;
     uint256 public currentMilestoneIndex;
+
+    /// @notice Freeze state. freezeStart is non-zero while a freeze is recorded but not yet settled
+    /// (it may already have lapsed); frozenUntil is its effective end; totalFrozen is the settled
+    /// cumulative frozen time. A lapsed freeze is settled lazily by the next freeze.
+    uint256 public freezeStart;
+    uint256 public frozenUntil;
+    uint256 public totalFrozen;
 
     mapping(address => uint256) public deposits;
     mapping(address => bool) public hasClaimedTokens;
@@ -118,6 +129,11 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
         uint256 extractedETH,
         uint256 burnedTokens
     );
+    /// @dev `until` is the effective end of this freeze; `totalFrozen` is the cumulative frozen time
+    /// if it runs to that end.
+    event MilestonesFrozen(uint256 until, uint256 totalFrozen);
+    /// @dev `totalFrozen` is the actual cumulative frozen time after this early unfreeze.
+    event MilestonesUnfrozen(uint256 totalFrozen);
 
     constructor() EIP712("ForgeCapita MilestoneEscrow", "1") {}
 
@@ -318,6 +334,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
     function executeMilestone() external nonReentrant {
         uint256 gasAtEntry = gasleft();
         require(!projectCancelled, "Project cancelled");
+        require(!isFrozen(), "Milestones frozen");
 
         uint256 index = currentMilestoneIndex;
         Milestone storage milestone = milestones[index];
@@ -370,6 +387,45 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
         }
 
         emit MilestoneExecuted(index, developerNetPayout, tokensVested, deduction);
+    }
+
+    /// @notice True while a freeze is active. Lapses by itself at frozenUntil.
+    function isFrozen() public view returns (bool) {
+        return freezeStart != 0 && block.timestamp < frozenUntil;
+    }
+
+    /// @notice Guardian blocks executeMilestone for up to 45 days (cumulative cap 90 days).
+    /// Only executeMilestone is affected; voting, staking, claims, refunds, cancel and shutdown keep working.
+    function freezeMilestones() external {
+        require(msg.sender == registry.guardian(), "Only Guardian can freeze");
+        require(!isFundingActive, "Funding still active");
+        require(!projectCancelled, "Project cancelled");
+        require(!completed, "Project is completed");
+        require(!isFrozen(), "Already frozen");
+
+        // A lapsed freeze is still recorded: settle its full effective length first.
+        uint256 settled = totalFrozen;
+        if (freezeStart != 0) settled += frozenUntil - freezeStart;
+        require(settled < MAX_TOTAL_FREEZE, "Freeze limit reached");
+
+        uint256 duration = MAX_TOTAL_FREEZE - settled;
+        if (duration > MAX_FREEZE_DURATION) duration = MAX_FREEZE_DURATION;
+
+        totalFrozen = settled;
+        freezeStart = block.timestamp;
+        frozenUntil = block.timestamp + duration;
+        emit MilestonesFrozen(frozenUntil, settled + duration);
+    }
+
+    /// @notice Guardian ends an active freeze early; only the time actually frozen is counted.
+    function unfreezeMilestones() external {
+        require(msg.sender == registry.guardian(), "Only Guardian can unfreeze");
+        require(isFrozen(), "Not frozen");
+
+        totalFrozen += block.timestamp - freezeStart;
+        freezeStart = 0;
+        frozenUntil = 0;
+        emit MilestonesUnfrozen(totalFrozen);
     }
 
     /// @dev Computes and books the deduction for this payout (design section 5).

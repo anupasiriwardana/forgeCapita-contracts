@@ -113,13 +113,15 @@ At the final milestone any `outstanding` left after the deduction is **written o
 
 The 120-day inactivity deadline was removed on 2026-10-28 (section 12), so a freeze needs no clock pause. A freeze only blocks `executeMilestone()`.
 
+As built (WS-04.6): state `freezeStart`, `frozenUntil`, `totalFrozen`; view `isFrozen()` (`freezeStart != 0 && now < frozenUntil`), so a freeze lapses with no transaction. A new freeze lasts `min(45 days, 90 days - settled)`; a lapsed freeze is added to `totalFrozen` when the next `freezeMilestones()` settles it, so the `totalFrozen` getter can under-report by up to 45 days until then. An early unfreeze adds only the elapsed time. Calling freeze while frozen reverts ("Already frozen"); freeze also reverts before funding closes, on a cancelled or completed project, and once 90 days are used ("Freeze limit reached"); unfreeze reverts with "Not frozen" when no freeze is active.
+
 **Decision (2026-10-28, limits chosen by the assistant at the user's request): a freeze is bounded.** Each freeze lapses automatically after 45 days (`MAX_FREEZE_DURATION`), the admin can unfreeze earlier with `unfreezeMilestones()`, and total freeze time per project is capped at 90 days (`MAX_TOTAL_FREEZE`); after that `freezeMilestones()` reverts. Why these numbers: the compliance process (a warning, 14 days to escalation, a decision, and a possible takeover signalling vote and handover) fits inside 45 days, and the 90-day cap stops serial re-freezing from holding payouts indefinitely. They are contract constants, so changing them needs a redeploy. After the cap the remedies are the existing ones: shutdown, takeover, or letting the project continue.
 
 Residual risk: no single freeze can last more than 45 days, so a lost or unresponsive admin key can no longer hold a project frozen forever. The developer can still call `cancelProject` and the admin can still call `emergencyShutdown` while frozen. The guardian key should still be a hardware wallet now and a multisig later (CON-05.2).
 
 ## 7. Events and ABI changes (indexer impact)
 
-New events: `SponsoredGas(relayer, account, action, cost, gasSpent)` (`action` is a `uint8`: Claim=0, Stake=1, Vote=2, Execute=3; `account` is address(0) for execute), `GasDebtRecovered(milestoneIndex, amount, outstanding)`, `GasDebtWrittenOff(amount)`, `MilestonesFrozen(by)`, `MilestonesUnfrozen(by, extension)`, `ProjectCompleted()`, registry events (`RelayerSet`, treasury and guardian rotation proposed / accepted, parameter changes). Changed signatures: `executeMilestone()` (no parameters), `Voted` unchanged. New functions listed in section 4.2. IDX-10 covers handling these.
+New events: `SponsoredGas(relayer, account, action, cost, gasSpent)` (`action` is a `uint8`: Claim=0, Stake=1, Vote=2, Execute=3; `account` is address(0) for execute), `GasDebtRecovered(milestoneIndex, amount, outstanding)`, `GasDebtWrittenOff(amount)`, `MilestonesFrozen(until, totalFrozen)`, `MilestonesUnfrozen(totalFrozen)` (no `by` address; the guardian is implied, the transaction sender shows who), `ProjectCompleted()`, registry events (`RelayerSet`, treasury and guardian rotation proposed / accepted, parameter changes). Changed signatures: `executeMilestone()` (no parameters), `Voted` unchanged. New functions listed in section 4.2. IDX-10 covers handling these.
 
 ## 8. Threat model (summary)
 
