@@ -91,7 +91,7 @@ contract ForgeCapitaFactory {
 
         // Wire contracts together
         DividendDistributor(payable(distributorClone)).setMilestoneEscrow(escrowClone);
-        ProjectToken(tokenClone).transfer(escrowClone, scaledSupply);
+        require(ProjectToken(tokenClone).transfer(escrowClone, scaledSupply), "Token transfer failed");
 
         ProjectToken(tokenClone).transferOwnership(escrowClone);
         developerProjects[msg.sender].push(tokenClone);

@@ -66,7 +66,7 @@ contract DividendDistributor is Initializable, ReentrancyGuard {
         return (stakedBalance[account] * (dividendPerToken - userDividendPerTokenPaid[account])) / MAGNIFIER + rewards[account];
     }
 
-    function stake(uint256 amount) external updateDividend(msg.sender) {
+    function stake(uint256 amount) external nonReentrant updateDividend(msg.sender) {
         _stake(msg.sender, amount);
     }
 
@@ -80,7 +80,7 @@ contract DividendDistributor is Initializable, ReentrancyGuard {
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external {
+    ) external nonReentrant {
         uint256 gasAtEntry = gasleft();
         _updateDividend(owner);
         try IERC20Permit(address(projectToken)).permit(owner, address(this), amount, deadline, v, r, s) {} catch {}
@@ -103,7 +103,7 @@ contract DividendDistributor is Initializable, ReentrancyGuard {
         emit Staked(account, amount);
     }
 
-    function withdraw(uint256 amount) external updateDividend(msg.sender) {
+    function withdraw(uint256 amount) external nonReentrant updateDividend(msg.sender) {
         require(amount > 0, "Cannot withdraw 0");
         require(stakedBalance[msg.sender] >= amount, "Insufficient staked balance");
         if (milestoneEscrow != address(0)) {
@@ -115,7 +115,7 @@ contract DividendDistributor is Initializable, ReentrancyGuard {
         emit Withdrawn(msg.sender, amount);
     }
 
-    function claimYield() external updateDividend(msg.sender) {
+    function claimYield() external nonReentrant updateDividend(msg.sender) {
         uint256 reward = rewards[msg.sender];
         require(reward > 0, "No yield available");
         rewards[msg.sender] = 0;

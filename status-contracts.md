@@ -5,16 +5,16 @@
 **Last Updated:** 2026-10-28
 **Location of this file:** moved here from the workspace root on 2026-10-28.
 
-**Current focus:** Step: WS-04.7b | State: awaiting-review (CON-03.12 done; Slither, second reviewer and the CON-03.10 decision still gate WS-04.8) | Updated: 2026-10-28
+**Current focus:** Step: WS-04.7 (hardening follow-up: Slither triage + 2 fixes) | State: awaiting-review (WS-04.8 still gated by CON-03.7 second reviewer and CON-03.10 decision) | Updated: 2026-10-28
 
-## BLOCKED - WS-04.8 (until Slither and two decisions are handled)
-Why: WS-04.7 is done except static analysis, which needs a tool on your machine, and two decisions affect what you set after deployment.
+## BLOCKED - WS-04.8 (until a second reviewer and one decision are handled)
+Why: Slither is done and triaged (CON-03.6 and CON-03.6a ticked). Still open: an independent review and the on-chain cost settings.
 You need to do:
-1. Install and run Slither (steps in backlog CON-03.6a: `pip install slither-analyzer solc-select`, compile, run `slither` on `forgecapita-contracts`, save the output) and share the findings.
-2. (CON-02.23 resolved 2026-10-28: end-of-call booking with fixed overheads; nothing to decide.)
-3. Decide CON-03.10 registry values per chain (`maxCostPerAction`, surcharges; proposals in `docs/gas-measurements-v2.md` sections 5-7). The minimum funding goal itself is decided: computed LIVE (2026-10-28), see "Decision 2026-10-28" below.
-How to confirm (no secrets in chat): paste the Slither output (no secrets in it) and state your choices.
-Then run: /next-task WS-04.7 (Slither triage), then /next-task WS-04.8
+1. CON-03.7: get a second reviewer for signature handling and roles; hand them the notes in backlog CON-03.7 (new `nonReentrant` stake paths; P2P accepts any token).
+2. Decide CON-03.10: the safety margin (default 50%) and the registry values per chain (`maxCostPerAction`, surcharges; proposals in `docs/gas-measurements-v2.md` sections 5-7). The minimum funding goal itself is decided: computed LIVE (2026-10-28), see "Decision 2026-10-28" below.
+3. Optional: re-run Slither after the two fixes: in the `forgecapita_hardhat` container, `slither . --filter-paths "mocks|node_modules"`.
+How to confirm (no secrets in chat): tell me the review is done and state your choices.
+Then run: /next-task WS-04.8
 
 ## Decision 2026-10-28: minimum funding goal is computed LIVE
 The user decided the minimum funding goal is not a fixed number. The API computes it live from the smoothed gas price (plus the Arbitrum L1 fee estimate), the measured gas units, N, M and a margin; the frontend only displays it; it is not enforced on-chain.
@@ -49,7 +49,9 @@ PENDING (blocked by scope; `forgecapita-api` and `forgecapita-frontend` are outs
 
 **Update 2026-10-28 (WS-04.6, awaiting review):** bounded freeze is in (CON-02.15; CON-02.16 and CON-03.3 ticked). `freezeMilestones()` / `unfreezeMilestones()` are guardian-only; a freeze lapses after 45 days (cumulative cap 90 days); only `executeMilestone` is blocked. Compile clean; `npm test`: **267 passing, 0 failing** (244 + 23 in `test/Freeze.ts`). MilestoneEscrow 15983 bytes. Not deployed; ABI sync is WS-05. Next: WS-04.7 (tests, size, static analysis, gas report).
 
-**Update 2026-10-28 (WS-04.7, awaiting review; tests and docs only, `contracts/` unchanged):** coverage, regression, seeded invariant, size and gas-measurement tests added (CON-03.1, 03.2, 03.4, 03.5, 03.9 ticked; CON-03.6 partial). Tracker-verified `npm test`: **316 passing, 0 failing** (267 + 49 new; per-file `it(` counts by grep: 16 SignedActionsCoverage, 11 GasLedgerCoverage, 18 RegressionEdgeCases, 1 Invariants, 2 ContractSizes, 1 GasMeasurement = 49; the per-file counts in dev's report (15/13/22) were wrong, the total is right), 47 s mocha / about 63 s wall. Open: Slither (user action), second reviewer (CON-03.7), and two decisions: ledger under-booking (CON-02.23) and minimum-goal recalibration (CON-03.10). Next: WS-04.8 (deploy, user action) after those.
+**Update 2026-10-28 (WS-04.7, awaiting review; tests and docs only at that point, `contracts/` unchanged then; later changed by CON-02.23 and the hardening follow-up):** coverage, regression, seeded invariant, size and gas-measurement tests added (CON-03.1, 03.2, 03.4, 03.5, 03.9 ticked; CON-03.6 partial). Tracker-verified `npm test`: **316 passing, 0 failing** (267 + 49 new; per-file `it(` counts by grep: 16 SignedActionsCoverage, 11 GasLedgerCoverage, 18 RegressionEdgeCases, 1 Invariants, 2 ContractSizes, 1 GasMeasurement = 49; the per-file counts in dev's report (15/13/22) were wrong, the total is right), 47 s mocha / about 63 s wall. Open: Slither (user action), second reviewer (CON-03.7), and two decisions: ledger under-booking (CON-02.23) and minimum-goal recalibration (CON-03.10). Next: WS-04.8 (deploy, user action) after those.
+
+**Update 2026-10-28 (WS-04.7 hardening follow-up, awaiting review):** after the user's Slither run, two small contract fixes were made (user decision): `ForgeCapitaFactory.launchProject` now `require`s the token transfer ("Token transfer failed"); `DividendDistributor` `stake`, `stakeWithPermit`, `withdraw`, `claimYield` are `nonReentrant`. New test-only `contracts/mocks/MockReentrantStaker.sol` and `test/DividendDistributorReentrancy.ts` (6 tests). Tracker-verified: compile ok, `npm test` **322 passing, 0 failing**, ABI unchanged (no signature change). Slither triaged (section "Slither triage"); CON-03.6 and CON-03.6a ticked. Open before WS-04.8: CON-03.7 and CON-03.10.
 
 **Earlier update 2026-10-28 (WS-04.3a, tests only):** a baseline regression suite for all v1 contracts now exists and `npm test` runs `hardhat test`. F1 and F2 are **confirmed** by two failing tests that assert the desired behaviour. No file under `contracts/` was changed. Next: WS-04.3b (registry, factory wiring, F1/F2 fixes).
 
@@ -104,15 +106,37 @@ Tracker-verified: `npm test` **267 passing, 0 failing** (244 + 23 in `test/Freez
 
 Tracker-verified: `npx hardhat compile` (nothing to recompile), `npm test` **316 passing, 0 failing**, mocha 47 s, wall about 63 s. `git status` in the contracts repo: only new untracked test files, `docs/gas-measurements-v2.md`, and `docs/v2-design.md` (+2 lines: the "Recalibration pointer" paragraph in section 13; the figures are untouched). `contracts/` unchanged at that point (CON-02.23 later changed it, see the change log); no existing test file modified. Sizes at that point (limit 24576, init code limit 49152; current MilestoneEscrow is 16040 after CON-02.23): MilestoneEscrow 15983, ProjectToken 6515, DividendDistributor 3977, ForgeCapitaFactory 3283, P2PExchange 2563, RevenueRouter 2294, ForgeCapitaRegistry 1625 (test-only `SponsoredGasCost` 57). Anti-vacuity checks by tracker: the size test reads artifacts and throws on non-hex bytecode, and its first test requires every production contract to be found; `Invariants.ts` contains 23 `expect` calls checked after state changes (stake sum equals total staked equals token balance, ledger bounds, etc.). Tracker skimmed Invariants.ts (first 120 lines plus greps), ContractSizes.ts in full and `docs/gas-measurements-v2.md` in full; other new test bodies not read. The measured gas figures were not re-run by the tracker (the doc is consistent with the dev's report and its own arithmetic: 100 x 842,466 + 751,927 = 84,998,527).
 
+## 4e. Test baseline and Slither triage (WS-04.7 hardening follow-up, 2026-10-28)
+
+Tracker-verified: `npx hardhat compile` (nothing to recompile), `npm test` **322 passing, 0 failing** (316 + 6 in `test/DividendDistributorReentrancy.ts`), `test/GasMeasurement.ts` run alone: 1 passing. `git diff -- contracts/`: `DividendDistributor.sol` (4 modifiers added) and `ForgeCapitaFactory.sol` (1 line) only; the new mock and test are untracked. Sizes from artifacts (limit 24576): MilestoneEscrow 16040, ProjectToken 6515, DividendDistributor 4200 (was 4009 after CON-02.23), ForgeCapitaFactory 3356, P2PExchange 2563, RevenueRouter 2294, ForgeCapitaRegistry 1625 (Registry not re-measured in this pass; unchanged source). Gas figures from dev (stake relayer steady 153,417 booked / 157,420 actual = 97.5%; first staker 88.7%) were not read from the tracker's own run output, only that the assertion test passes (>=95% steady, >=70% first call); `SponsoredGasCost` constants untouched. Dev note: in `stakeWithPermit` the guard cost is paid before `gasAtEntry` and is not booked (slight under-booking, within tolerance).
+
+Anti-vacuity check of the new tests (tracker read both files): `MockReentrantStaker.receive()` really re-enters the distributor with `claimYield`, `withdraw(1)` or `stake(1)` through a low-level call and stores `ok` and the revert data; the test asserts `reentered == true`, `reentrySucceeded == false` and that the revert data equals the selector of `ReentrancyGuardReentrantCall` (3 parametrised tests); a fourth checks the yield is paid exactly once (`YieldClaimed` args, balance delta, rewards 0); a fifth that withdraw/claim still work afterwards; a sixth that `routePayment` still reaches `receive()` (unguarded). Caveat: the re-entry is exercised from `claimYield`'s ETH transfer only; the guard on `stake`, `stakeWithPermit` and `withdraw` as outer calls is not re-entered from a hook (their only external calls are to the project's own token, which has no hooks). Dev's claims about modifier order and the clones were confirmed by reading the diff (order `nonReentrant updateDividend`).
+
+### Slither triage (user ran `slither . --filter-paths "mocks|node_modules"` in container `forgecapita_hardhat`; 47 contracts, 102 detectors, 62 results, none high; mocks excluded; run on the code BEFORE the two fixes; NOT re-run afterwards)
+Triage is the tracker's assessment from the caller's summary; the raw Slither output was not seen by the tracker and the P2P code was not read in full.
+
+| Detector / location | Assessment | Outcome |
+|---|---|---|
+| arbitrary-send-eth `RevenueRouter.claimTreasuryFunds` | Destination is the registry treasury, not the caller | False positive |
+| unchecked-transfer `ForgeCapitaFactory.launchProject` (line 94) | Return value ignored | FIXED: `require(..., "Token transfer failed")` |
+| reentrancy-no-eth `DividendDistributor.stakeWithPermit` | Low risk (only external calls go to the project's own token, state written before `transferFrom`) | FIXED additionally: `nonReentrant` on all four stake paths |
+| missing-zero-check: factory constructor masters, `MilestoneEscrow.initialize` developer, `RevenueRouter.initialize` escrow/distributor, `DividendDistributor.initialize` factory | Factory always passes real values; only a deployment-script mistake could trigger | ACCEPTED; optional hardening CON-03.15 |
+| reentrancy-benign `MilestoneEscrow.claimTokensFor` (gasSpent updated after transfer of the project's own token) | Low | ACCEPTED |
+| reentrancy-benign `ForgeCapitaFactory.launchProject` (trusted clones) | Low | ACCEPTED |
+| reentrancy-benign `P2PExchange.createListing` (`transferFrom` on a seller-chosen token before the listing is written) | A malicious token only affects listings of that token; P2P accepts any token, so buyers must check the token; frontend should warn | ACCEPTED low; see CON-03.7 note and CON-03.16 |
+| reentrancy-events, timestamp, low-level-calls, missing-inheritance (ProjectToken vs IProjectToken), naming-convention | Deadlines are in days; all low-level success flags checked; style | INFORMATIONAL, accepted |
+
+Optional re-run for the user (not required): in the `forgecapita_hardhat` container, `slither . --filter-paths "mocks|node_modules"`; expect the Factory unchecked-transfer and the `stakeWithPermit` reentrancy result to be gone.
+
 ### Open findings after WS-04.7
 - RESOLVED 2026-10-28 (CON-02.23): cost is now booked at the end of each relayer call plus fixed overheads. Booked vs actual steady: claim 96.2%, stake 99.0%, vote 97.7%, execute 96.8% non-final / 97.0% final; first-in-project calls lower on purpose (claim 74.2%). `npm test` 316 passing; sizes: MilestoneEscrow 16040, DividendDistributor 4009, Factory 3283, Registry 1625, P2P 2563, ProjectToken 6515, RevenueRouter 2294. Follow-ups CON-03.12 (re-derive surcharges/caps, re-check CON-03.10) and CON-03.13 (recalibrate on gas shifts). Historic text (superseded by the 2026-10-28 re-measurement): the ledger under-books relayer cost (gasleft() read early): claim 81%, stake 97%, vote 81%, execute 41% non-final / 30% final of actual gas. With zero surcharges, real platform spend about 85.0M gas vs about 70.9M booked (83%). The ceiling still bounds recoverable amounts; real exposure above it is larger. Options: raise per-action `l1Surcharge` (doc section 5), or contract change to book at end of call.
 - DECISION CON-03.10 (open, user chooses): re-measured 2026-10-28 (WS-04.7b, CON-03.12 done): 85,020,820 gas per project (about 15% above the 73.75M in design section 13); proposals in `docs/gas-measurements-v2.md` sections 5-7: BSC 1 gwei goal 2.55 BNB, maxCostPerAction 3.5e14, surcharges 4.5e12/1.5e12/2.5e12/3.5e12 (or all 0); BSC 3 gwei goal 7.65 BNB, 1e15, 1.35e13/4.5e12/7.5e12/1.05e13; Arbitrum Sepolia goal 1.52 ETH, 2e14, 6.04e13/6.01e13/6.02e13/6.03e13 (prices and the 0.00006 ETH L1 fee are estimates). Whole-project booked/actual 97.55% (99.75% BSC, 99.89% Arbitrum with the proposed surcharges); at the minimum goal the ledger never binds in the design scenario. FE-53 and API-41 depend on the chosen values. On Arbitrum the L1 fee is about 83% of cost, so `l1Surcharge` must be set.
 - NEW (CON-03.14, optional): `executeMilestone` with a deduction is under-booked (booked about 108k/148k vs actual 145.7k/169.6k, 74%/87%); occurs only when the project is already over budget (about 0.2% of project gas) and is not covered by the flat surcharge. Fixing it would be a contract change; not done.
 - Registry caps `maxCostPerAction` and `l1Surcharge` at 1 ETH each.
-- Dev self-review (not Slither): no issue; low-risk note that `stakeWithPermit` and `claimYield` lack `nonReentrant` (CEI holds). For the second reviewer (CON-03.7 / CON-03.11).
+- Dev self-review: no issue; low-risk note that `stakeWithPermit` and `claimYield` lacked `nonReentrant` (CEI holds). RESOLVED in code 2026-10-28 (guard added on all four stake paths); the second reviewer still confirms (CON-03.7 / CON-03.11).
 - ERC-1271 reentrancy is only exercised through the existing mock that re-enters `vote()`.
 - Invariant tests are seeded randomised scenarios (10, seed 20261028), not a fuzzer.
-- Slither not installed; CON-03.6a is a user action. CON-03.7 (second reviewer) not done.
+- Slither run and triaged 2026-10-28 (CON-03.6a done; see "Slither triage"). CON-03.7 (second reviewer) not done.
 
 ### Open findings after WS-04.6
 - No security issue found. Checked: guardian-only via `registry.guardian()` (follows rotation); a freeze cannot be extended (`Already frozen`); total never exceeds 90 days (settle lapsed freeze, require settled < 90, duration clamped); state is written before the event; `isFrozen()` is referenced only by `executeMilestone` and the freeze functions, so cancel, refund, shutdown, vote, stake and claims are unaffected.
@@ -175,12 +199,15 @@ Verified by running `npm test` (`hardhat test`): **144 passing, 2 failing** (146
    [x] CON-02.15, CON-02.16, CON-03.3 freeze and regression (WS-04.6, awaiting review).
    [x] CON-03.1, 03.2, 03.4, 03.5, 03.9 (WS-04.7, awaiting review); CON-03.6 size gate and gas report done.
    [x] CON-03.12 re-derive suggested values and minimum goals (WS-04.7b, awaiting review); CON-03.14 optional new item.
-   [ ] `[USER-ACTION]` CON-03.6a Slither; CON-03.7 second reviewer; CON-03.10 decision. CON-02.23 resolved 2026-10-28; CON-03.12 and CON-03.13 added.
+   [x] CON-03.6, CON-03.6a Slither run and triaged; 2 hardening fixes (WS-04.7 follow-up, awaiting review).
+   [ ] CON-03.7 second reviewer; CON-03.10 decision (margin + on-chain cost settings). Optional: CON-03.15 zero-address checks, CON-03.16 P2P any-token. CON-02.23 resolved 2026-10-28; CON-03.12 done; CON-03.13 open.
 6. [ ] `[USER-ACTION]` CON-04 deploy to both testnets, fund and allow-list the relayer.
 
 ---
 
 ## Change log
+
+2026-10-28  WS-04.7 (hardening follow-up)  Slither (run by the user) triaged: no high findings, 62 results. Fixes: `require` on the token transfer in `ForgeCapitaFactory.launchProject`; `nonReentrant` (order `nonReentrant updateDividend`) on `DividendDistributor.stake/stakeWithPermit/withdraw/claimYield`; test-only `MockReentrantStaker` and `test/DividendDistributorReentrancy.ts` (6 tests). Sizes: DividendDistributor 4200, Factory 3356. CON-03.6 and CON-03.6a ticked; CON-03.15 and CON-03.16 (optional) added; CON-03.7 note for the reviewer (stake paths, P2P any token); CON-03.11 updated. Slither NOT re-run after the fixes  - verified by: tracker ran compile and `npm test` (322 passing, 0 failing), `test/GasMeasurement.ts` alone (1 passing), re-measured artifact sizes, read `git diff -- contracts/` and both new test files in full; Slither output itself not seen by the tracker; dev's gas percentages not independently read
 
 2026-10-28  Decision (CON-03.10)  User decided the minimum funding goal is computed LIVE (API-41, shown by FE-53), not a fixed number. Applied: CON-03.10 reworded in `backlog-contracts.md`, `ROADMAP.md` notes, decision paragraph in `docs/v2-design.md` section 13. PENDING (out of step scope): API-41, API-71, FE-53, FE-41 backlog edits; drafts saved in this file under "Pending backlog edits (blocked by scope)". CON-03.10 still open for registry values  - verified by: tracker grep found the decision paragraph at `docs/v2-design.md` line 194; the `backlog-contracts.md` and `ROADMAP.md` edits were reported by the caller and not re-read; no code changed, tests not re-run
 
