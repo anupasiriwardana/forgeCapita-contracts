@@ -130,38 +130,27 @@ export async function launchAndStartMilestoneProject() {
   return project;
 }
 
-export async function signGasDebt(
-  project: LaunchedProject,
-  milestoneIndex: bigint,
-  gasDebt: bigint,
-  signer: Signer = project.treasury,
-) {
-  const { chainId } = await ethers.provider.getNetwork();
-  const digest = ethers.solidityPackedKeccak256(
-    ["address", "uint256", "uint256", "uint256"],
-    [await project.escrow.getAddress(), milestoneIndex, chainId, gasDebt],
-  );
-  return signer.signMessage(ethers.getBytes(digest));
-}
-
-/** Alice and Bob vote yes (560 of 800 public tokens) and the milestone is executed. */
-export async function approveAndExecuteMilestone(
-  project: LaunchedProject,
-  milestoneIndex: bigint,
-  gasDebt = 0n,
-) {
+/** Alice and Bob vote yes (560 of 800 public tokens): enough for the fast-track approval. */
+export async function approveCurrentMilestone(project: LaunchedProject) {
   await project.escrow.connect(project.alice).vote(true);
   await project.escrow.connect(project.bob).vote(true);
-  const signature = await signGasDebt(project, milestoneIndex, gasDebt);
-  return project.escrow.executeMilestone(gasDebt, signature);
+}
+
+/** Approves the current milestone and executes it as `executor` (anyone may execute). */
+export async function approveAndExecuteMilestone(
+  project: LaunchedProject,
+  executor: Signer = project.deployer,
+) {
+  await approveCurrentMilestone(project);
+  return project.escrow.connect(executor).executeMilestone();
 }
 
 /** Both milestones executed; backers have unstaked and hold their tokens again. */
 export async function launchAndCompleteProject() {
   const project = await launchAndStartMilestoneProject();
-  await approveAndExecuteMilestone(project, 0n);
+  await approveAndExecuteMilestone(project);
   await project.escrow.connect(project.developer).startMilestone(1);
-  await approveAndExecuteMilestone(project, 1n);
+  await approveAndExecuteMilestone(project);
   for (const backer of [project.alice, project.bob, project.carol]) {
     const staked = await project.distributor.stakedBalance(backer.address);
     await project.distributor.connect(backer).withdraw(staked);

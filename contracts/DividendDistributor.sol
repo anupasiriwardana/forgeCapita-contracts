@@ -7,8 +7,12 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interfaces/IMilestoneEscrow.sol";
 import "./interfaces/IForgeCapitaRegistry.sol";
+import "./libraries/SponsoredGasCost.sol";
 
 contract DividendDistributor is Initializable, ReentrancyGuard {
+    /// @dev Registry action kind for staking (Claim, Stake, Vote, Execute = 0..3).
+    uint8 private constant ACTION_STAKE = 1;
+
     IERC20 public projectToken;
     address public factory;
     address public milestoneEscrow;
@@ -49,9 +53,13 @@ contract DividendDistributor is Initializable, ReentrancyGuard {
     }
 
     modifier updateDividend(address account) {
+        _updateDividend(account);
+        _;
+    }
+
+    function _updateDividend(address account) private {
         rewards[account] = getClaimableYield(account);
         userDividendPerTokenPaid[account] = dividendPerToken;
-        _;
     }
 
     function getClaimableYield(address account) public view returns (uint256) {
@@ -64,6 +72,7 @@ contract DividendDistributor is Initializable, ReentrancyGuard {
 
     /// @notice Stakes `owner`'s tokens using their ERC-2612 permit. Callable by anyone (e.g. a relayer).
     /// A permit that was already consumed (front-run) is tolerated as long as the allowance suffices.
+    /// When the caller is an allow-listed relayer the cost is reported to the escrow's gas ledger.
     function stakeWithPermit(
         address owner,
         uint256 amount,
@@ -71,9 +80,19 @@ contract DividendDistributor is Initializable, ReentrancyGuard {
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external updateDividend(owner) {
+    ) external {
+        uint256 gasAtEntry = gasleft();
+        _updateDividend(owner);
         try IERC20Permit(address(projectToken)).permit(owner, address(this), amount, deadline, v, r, s) {} catch {}
         _stake(owner, amount);
+        if (registry.isRelayer(msg.sender)) {
+            IMilestoneEscrow(milestoneEscrow).recordSponsoredGas(
+                msg.sender,
+                owner,
+                ACTION_STAKE,
+                SponsoredGasCost.cost(registry, ACTION_STAKE, gasAtEntry, msg.data.length)
+            );
+        }
     }
 
     function _stake(address account, uint256 amount) private {

@@ -58,7 +58,7 @@ Reading the registry costs one extra call per privileged check; negligible next 
 | Contract | Changes |
 |---|---|
 | `ProjectToken` | Add ERC-2612 `permit` (OZ `ERC20PermitUpgradeable`), overridden with the same `checkValidity` guard as `approve` so permits cannot be used after an emergency shutdown. |
-| `DividendDistributor` | Add `stakeWithPermit(owner, amount, deadline, v, r, s)`: tries `permit` (ignores a front-run permit), then stakes for `owner`. Callable by anyone; if the caller is an allow-listed relayer it reports the sponsored cost to the escrow. Existing `stake`, `withdraw`, `claimYield` unchanged. Takes the registry address at `initialize`. |
+| `DividendDistributor` | Add `stakeWithPermit(owner, amount, deadline, v, r, s)`: tries `permit` (ignores a front-run permit), then stakes for `owner`. Callable by anyone; if the caller is an allow-listed relayer it reports the sponsored cost to the escrow. When the caller is an allow-listed relayer it calls `escrow.recordSponsoredGas(relayer, account, action, cost)`, which the escrow accepts only from its own distributor. Existing `stake`, `withdraw`, `claimYield` unchanged. Takes the registry address at `initialize`. |
 | `MilestoneEscrow` | Add `claimTokensFor(account)`, `voteBySig(...)`, parameterless `executeMilestone()`, gas ledger, freeze, `completed` flag (F2), clock start at close (F1), roles read from the registry. Keep `claimTokens()`, `vote(bool)`. |
 | `RevenueRouter` | Read `treasury` from the registry (claim target). Split logic unchanged. |
 | `P2PExchange` | Read `treasury` from the registry. Logic unchanged. |
@@ -92,7 +92,7 @@ used = gasAtEntry - gasleft() + 21000 + 16 * msg.data.length   // calldata bound
 cost = min(used * tx.gasprice + l1Surcharge(action), maxCostPerAction)
 ```
 
-Ceiling that bounds the platform's exposure: a sponsored call **reverts** when `gasSpent + cost > gasBudget + netFunds * MAX_DEBT_BPS / 10_000`, so everything the platform ever spends on a project is recoverable (total deductions across milestones are at most 15% of `netFunds`). The API then tells the user to self-pay. Direct (non-relayer) calls never touch the ledger.
+Ceiling that bounds the platform's exposure: a sponsored call **reverts** when `gasSpent + cost > gasBudget + netFunds * MAX_DEBT_BPS / 10_000`, so everything the platform ever spends on a project is recoverable (total deductions across milestones are at most 15% of `netFunds`). The API then tells the user to self-pay. Direct (non-relayer) calls never touch the ledger. Before funding closes the ceiling is 0, so costly relayer calls revert with "Gas ceiling exceeded". Registry `maxCostPerAction` and `l1Surcharge` default to 0 and must be set by the guardian at deployment, together with allow-listing the relayer.
 
 Recovery in `executeMilestone()`:
 
@@ -119,7 +119,7 @@ Residual risk: no single freeze can last more than 45 days, so a lost or unrespo
 
 ## 7. Events and ABI changes (indexer impact)
 
-New events: `SponsoredGas(relayer, account, action, cost, gasSpent)`, `GasDebtRecovered(milestoneIndex, amount, outstanding)`, `GasDebtWrittenOff(amount)`, `MilestonesFrozen(by)`, `MilestonesUnfrozen(by, extension)`, `ProjectCompleted()`, registry events (`RelayerSet`, treasury and guardian rotation proposed / accepted, parameter changes). Changed signatures: `executeMilestone()` (no parameters), `Voted` unchanged. New functions listed in section 4.2. IDX-10 covers handling these.
+New events: `SponsoredGas(relayer, account, action, cost, gasSpent)` (`action` is a `uint8`: Claim=0, Stake=1, Vote=2, Execute=3; `account` is address(0) for execute), `GasDebtRecovered(milestoneIndex, amount, outstanding)`, `GasDebtWrittenOff(amount)`, `MilestonesFrozen(by)`, `MilestonesUnfrozen(by, extension)`, `ProjectCompleted()`, registry events (`RelayerSet`, treasury and guardian rotation proposed / accepted, parameter changes). Changed signatures: `executeMilestone()` (no parameters), `Voted` unchanged. New functions listed in section 4.2. IDX-10 covers handling these.
 
 ## 8. Threat model (summary)
 

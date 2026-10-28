@@ -4,12 +4,11 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import "./interfaces/IDividendDistributor.sol";
 import "./interfaces/IForgeCapitaRegistry.sol";
+import "./libraries/SponsoredGasCost.sol";
 
 interface IProjectToken is IERC20 {
     function emergencyInvalidate() external;
@@ -17,9 +16,6 @@ interface IProjectToken is IERC20 {
 }
 
 contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
-    using ECDSA for bytes32;
-    using MessageHashUtils for bytes32;
-
     bytes32 private constant VOTE_TYPEHASH =
         keccak256("Vote(address voter,uint256 milestoneIndex,bool support,uint256 deadline)");
 
@@ -46,6 +42,21 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
     uint256 public constant PLATFORM_FEE_PERCENT = 5;
     uint256 public constant VOTING_PERIOD = 28 days;
     uint256 public constant QUORUM_PERCENT = 20;
+    /// @notice Cap, in basis points of netFunds, on total sponsored gas the project can owe beyond the budget,
+    /// and on the share of any single milestone payout that can be deducted to repay it.
+    uint256 public constant MAX_DEBT_BPS = 1500;
+
+    /// @dev Registry action kinds (Claim, Stake, Vote, Execute = 0..3).
+    uint8 private constant ACTION_CLAIM = 0;
+    uint8 private constant ACTION_VOTE = 2;
+    uint8 private constant ACTION_EXECUTE = 3;
+
+    /// @notice Gas ledger. gasBudget is the platform fee already paid to the treasury at close;
+    /// gasSpent is what relayers have spent on this project; gasRecovered is what payouts have repaid
+    /// from the part of gasSpent that exceeded the budget.
+    uint256 public gasBudget;
+    uint256 public gasSpent;
+    uint256 public gasRecovered;
 
     struct Milestone {
         string description;
@@ -78,6 +89,19 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
         uint256 tokensVested,
         uint256 gasDebtRecouped
     );
+    event SponsoredGas(
+        address indexed relayer,
+        address indexed account,
+        uint8 action,
+        uint256 cost,
+        uint256 gasSpent
+    );
+    event GasDebtRecovered(
+        uint256 indexed milestoneIndex,
+        uint256 amount,
+        uint256 outstanding
+    );
+    event GasDebtWrittenOff(uint256 amount);
     event ProjectCancelled(string reason);
     event ProjectCompleted();
     event RefundClaimed(address indexed backer, uint256 amount);
@@ -185,6 +209,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
 
         uint256 fee = (totalRaised * PLATFORM_FEE_PERCENT) / 100;
         netFunds = totalRaised - fee;
+        gasBudget = fee;
 
         (bool feeSuccess, ) = forgeCapitaTreasury().call{value: fee}("");
         require(feeSuccess, "Fee transfer failed");
@@ -215,8 +240,11 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
     }
 
     /// @notice Permissionless: delivers `account`'s tokens to `account`, never to the caller.
+    /// When the caller is an allow-listed relayer the cost is recorded in the gas ledger.
     function claimTokensFor(address account) external nonReentrant {
+        uint256 gasAtEntry = gasleft();
         _claimTokens(account);
+        _recordGas(account, ACTION_CLAIM, gasAtEntry);
     }
 
     function _claimTokens(address account) private {
@@ -244,6 +272,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
         uint256 deadline,
         bytes calldata signature
     ) external nonReentrant {
+        uint256 gasAtEntry = gasleft();
         require(block.timestamp <= deadline, "Vote signature expired");
         bytes32 digest = _hashTypedDataV4(
             keccak256(
@@ -261,6 +290,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
             "Invalid vote signature"
         );
         _vote(voter, support);
+        _recordGas(voter, ACTION_VOTE, gasAtEntry);
     }
 
     function _vote(address voter, bool support) private {
@@ -282,18 +312,15 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
         emit Voted(voter, currentMilestoneIndex, support, voterWeight);
     }
 
-    /**
-     * @dev Executes a milestone and recoups Paymaster gas debt via a Treasury-signed payload.
-     * @param gasDebt The total accumulated excess gas debt owed to the Treasury.
-     * @param signature The ECDSA signature from the forgeCapitaTreasury verifying the debt amount.
-     */
-    function executeMilestone(
-        uint256 gasDebt,
-        bytes calldata signature
-    ) external nonReentrant {
+    /// @notice Executes the current milestone once approved. Callable by anyone.
+    /// Sponsored gas above the budget is repaid to the treasury from the payout (at most 15% of it);
+    /// the remainder carries to the next milestone and is written off after the final one.
+    function executeMilestone() external nonReentrant {
+        uint256 gasAtEntry = gasleft();
         require(!projectCancelled, "Project cancelled");
 
-        Milestone storage milestone = milestones[currentMilestoneIndex];
+        uint256 index = currentMilestoneIndex;
+        Milestone storage milestone = milestones[index];
         require(milestone.isVotingOpen, "Voting is not open");
 
         bool fastTrackPassed = milestone.yesVotes > (publicSupply / 2);
@@ -308,40 +335,23 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
             "Milestone approval conditions not met"
         );
 
-        // Verify Gas Debt Signature (Option 2: Stateless Recoupment)
-        bytes32 messageHash = keccak256(
-            abi.encodePacked(
-                address(this),
-                currentMilestoneIndex,
-                block.chainid,
-                gasDebt
-            )
-        );
-        bytes32 ethSignedMessageHash = messageHash.toEthSignedMessageHash();
-        address recoveredSigner = ethSignedMessageHash.recover(signature);
-        require(
-            recoveredSigner == forgeCapitaTreasury(),
-            "Invalid gas debt signature"
-        );
+        // Record this call's own cost first so it is part of the deduction below.
+        _recordGas(address(0), ACTION_EXECUTE, gasAtEntry);
 
         milestone.isExecuted = true;
         milestone.isVotingOpen = false;
 
+        bool isFinalMilestone = (index == milestones.length - 1);
+        currentMilestoneIndex = index + 1;
+
         uint256 ethToRelease = (netFunds * milestone.unlockPercentage) / 100;
-        require(ethToRelease >= gasDebt, "Gas debt exceeds milestone payout");
-
-        uint256 developerNetPayout = ethToRelease - gasDebt;
-
-        bool isFinalMilestone = (currentMilestoneIndex ==
-            milestones.length - 1);
-        currentMilestoneIndex++;
-        if (isFinalMilestone) {
-            completed = true;
-            emit ProjectCompleted();
-        }
+        uint256 deduction = _settleGasDebt(index, ethToRelease, isFinalMilestone);
+        uint256 developerNetPayout = ethToRelease - deduction;
 
         uint256 tokensVested = 0;
         if (isFinalMilestone) {
+            completed = true;
+            emit ProjectCompleted();
             tokensVested = developerSupply;
             require(
                 projectToken.transfer(developer, tokensVested),
@@ -349,24 +359,66 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
             );
         }
 
-        // Pay the Treasury its recouped gas debt first
-        if (gasDebt > 0) {
-            (bool debtSuccess, ) = forgeCapitaTreasury().call{value: gasDebt}("");
+        if (deduction > 0) {
+            (bool debtSuccess, ) = forgeCapitaTreasury().call{value: deduction}("");
             require(debtSuccess, "Treasury debt transfer failed");
         }
 
-        // Pay the developer the remaining balance
         if (developerNetPayout > 0) {
             (bool devSuccess, ) = developer.call{value: developerNetPayout}("");
             require(devSuccess, "Developer ETH transfer failed");
         }
 
-        emit MilestoneExecuted(
-            currentMilestoneIndex - 1,
-            developerNetPayout,
-            tokensVested,
-            gasDebt
+        emit MilestoneExecuted(index, developerNetPayout, tokensVested, deduction);
+    }
+
+    /// @dev Computes and books the deduction for this payout (design section 5).
+    function _settleGasDebt(
+        uint256 index,
+        uint256 ethToRelease,
+        bool isFinalMilestone
+    ) private returns (uint256 deduction) {
+        uint256 overflow = gasSpent > gasBudget ? gasSpent - gasBudget : 0;
+        uint256 outstanding = overflow - gasRecovered;
+        uint256 cap = (ethToRelease * MAX_DEBT_BPS) / 10_000;
+        deduction = outstanding < cap ? outstanding : cap;
+        gasRecovered += deduction;
+        outstanding -= deduction;
+        if (deduction > 0) emit GasDebtRecovered(index, deduction, outstanding);
+        if (isFinalMilestone && outstanding > 0) emit GasDebtWrittenOff(outstanding);
+    }
+
+    /// @notice Called by this project's distributor to book a relayer-sponsored stake.
+    function recordSponsoredGas(
+        address relayer,
+        address account,
+        uint8 action,
+        uint256 cost
+    ) external {
+        require(msg.sender == address(dividendDistributor), "Only distributor");
+        _bookGas(relayer, account, action, cost);
+    }
+
+    /// @dev Records the cost of the current call only when it comes from an allow-listed relayer.
+    function _recordGas(address account, uint8 action, uint256 gasAtEntry) private {
+        if (!registry.isRelayer(msg.sender)) return;
+        _bookGas(
+            msg.sender,
+            account,
+            action,
+            SponsoredGasCost.cost(registry, action, gasAtEntry, msg.data.length)
         );
+    }
+
+    /// @dev Reverts above the exposure ceiling. Before funding closes gasBudget and netFunds are 0,
+    /// so any sponsored call with a non-zero cost reverts.
+    function _bookGas(address relayer, address account, uint8 action, uint256 cost) private {
+        gasSpent += cost;
+        require(
+            gasSpent <= gasBudget + (netFunds * MAX_DEBT_BPS) / 10_000,
+            "Gas ceiling exceeded"
+        );
+        emit SponsoredGas(relayer, account, action, cost, gasSpent);
     }
 
     function isUserVoteLocked(address account) external view returns (bool) {

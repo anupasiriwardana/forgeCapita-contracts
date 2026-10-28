@@ -5,7 +5,7 @@
 **Last Updated:** 2026-10-28
 **Location of this file:** moved here from the workspace root on 2026-10-28.
 
-**Current focus:** Step: WS-04.4 | State: awaiting-review | Updated: 2026-10-28
+**Current focus:** Step: WS-04.5 | State: awaiting-review | Updated: 2026-10-28
 
 ---
 
@@ -16,6 +16,8 @@
 **Update 2026-10-28 (WS-04.3b, awaiting review):** `ForgeCapitaRegistry` (treasury, guardian, relayer allow-list, `maxCostPerAction`, `l1Surcharge`, two-step rotation) exists, and the factory, escrow, distributor, router and P2P exchange read roles from it at call time. F1 and F2 are fixed in v2 (v1 is unchanged and deployed). Compile clean; `npm test`: **187 passing, 0 failing**. Not deployed. The Ignition modules and `scripts/` are stale (still deploy the old factory). **Follow-up 2026-10-28 (user decisions):** the 120-day inactivity deadline (`milestoneDeadline`, `MAX_INACTIVITY_PERIOD`) is removed from `MilestoneEscrow`; `refundDeadProject` keeps its name but requires `projectCancelled`. A stalled developer is handled by guardian `emergencyShutdown` or `proposeNewDeveloper`. CON-02.21 (late start) is resolved as no longer applicable, and the freeze needs no clock pause. The guardian may `emergencyShutdown` a completed project (accepted). Then, by user decision, `cancelProject` was opened to the guardian too (CON-02.22). Now **195 passing, 0 failing**, MilestoneEscrow 11950 bytes. ABI change: getters `milestoneDeadline()` and `MAX_INACTIVITY_PERIOD()` are gone (sync in WS-05). Next: WS-04.4 (signed actions and permit).
 
 **Update 2026-10-28 (WS-04.4, awaiting review):** signed actions and permit are in (CON-02.5 to CON-02.9). `MilestoneEscrow` gains EIP-712 (`ForgeCapita MilestoneEscrow`, "1"), `claimTokensFor(account)` (permissionless, pays the depositor) and `voteBySig(voter, support, deadline, signature)` (ERC-1271 capable, no nonce, single-use through `hasVoted`, bound to the current milestone). `ProjectToken` gains ERC-2612 `permit` (blocked after invalidation) and `DividendDistributor` gains `stakeWithPermit`. Compile clean; `npm test`: **227 passing, 0 failing**. MilestoneEscrow 13266 bytes. Not deployed; ABI sync is WS-05. Next: WS-04.5 (gas ledger and parameterless `executeMilestone`).
+
+**Update 2026-10-28 (WS-04.5, awaiting review):** gas ledger and parameterless `executeMilestone()` are in (CON-02.10 to CON-02.14). The treasury-signature path is gone. Ledger `gasBudget`/`gasSpent`/`gasRecovered`, 15% cap (`MAX_DEBT_BPS`), `recordSponsoredGas(relayer, account, action, cost)` (distributor only), events `SponsoredGas`, `GasDebtRecovered`, `GasDebtWrittenOff`. Compile clean; `npm test`: **244 passing, 0 failing**. MilestoneEscrow 14777 bytes. Not deployed; ABI sync is WS-05 (indexer and frontend still hold the old `executeMilestone` ABI). Next: WS-04.6 (freeze).
 
 **Earlier update 2026-10-28 (WS-04.3a, tests only):** a baseline regression suite for all v1 contracts now exists and `npm test` runs `hardhat test`. F1 and F2 are **confirmed** by two failing tests that assert the desired behaviour. No file under `contracts/` was changed. Next: WS-04.3b (registry, factory wiring, F1/F2 fixes).
 
@@ -46,7 +48,7 @@ The user accepted redeploying and re-syncing the indexer, so v2 is a fresh deplo
 
 ## 4. Not yet done
 
-Phase 2: CON-02.1 to CON-02.4, CON-02.18 and CON-02.19 are done (WS-04.3b). CON-02.21 is resolved by removal of the inactivity deadline. CON-02.5 to CON-02.9 are done (WS-04.4). Remaining: CON-02.10 to CON-02.16, CON-02.20 (user). CON-03.8 is done. Next: WS-04.5 (gas ledger and `executeMilestone` without signature). CON-03.9 (gas report) is deferred to WS-04.7.
+Phase 2: CON-02.1 to CON-02.4, CON-02.18 and CON-02.19 are done (WS-04.3b). CON-02.21 is resolved by removal of the inactivity deadline. CON-02.5 to CON-02.9 are done (WS-04.4). CON-02.10 to CON-02.14 are done (WS-04.5). Remaining: CON-02.15, CON-02.16, CON-02.20 (user). CON-03.8 is done. Next: WS-04.6 (freeze). CON-03.9 (gas report) is deferred to WS-04.7.
 
 ## 4a. Test baseline (updated WS-04.4, 2026-10-28)
 
@@ -58,10 +60,24 @@ After the guardian-cancel follow-up (2026-10-28), tracker-verified: `npm test` *
 After WS-04.3b, tracker-verified: `npx hardhat compile` clean, `npm test` **187 passing, 0 failing** (was 144 passing, 2 failing). New files: `test/ForgeCapitaRegistry.ts` (25 tests), `test/RegistryIntegration.ts` (12), `test/regressions-v1-fixes.ts` (replaces `known-issues-v1.ts`; F1 and F2 tests kept, now green). Two revert strings in existing tests changed to "Only active dev or Guardian can propose" and "Only Guardian can trigger emergency shutdown" (role rename; the test files are untracked so no git diff exists to compare, only skimmed). `test/RevenueRouter.ts` was extended.
 Deployed bytecode sizes re-measured from artifacts (limit 24576): ForgeCapitaRegistry 1625, MilestoneEscrow 12078 (now 11761 after the follow-up), ForgeCapitaFactory 3283, RevenueRouter 2294, P2PExchange 2563, DividendDistributor 3170, ProjectToken 4212.
 
+## 4b. Test baseline (WS-04.5, 2026-10-28)
+
+Tracker-verified: `npx hardhat compile` clean, `npm test` **244 passing, 0 failing** (227 baseline, +24 in `test/GasLedger.ts`, -7 signature-only tests removed from `test/MilestoneEscrow.ts`). Sizes re-measured from artifacts (limit 24576): MilestoneEscrow 14777, ProjectToken 6515, DividendDistributor 3977, ForgeCapitaFactory 3283, ForgeCapitaRegistry 1625, P2PExchange 2563, RevenueRouter 2294. Test changes: `signGasDebt` helper removed, `approveCurrentMilestone` added, `approveAndExecuteMilestone` default executor is the deployer; one `RegistryIntegration` test rewritten; `regressions-v1-fixes` only has a helper call changed. Tracker read the full contract diff and the GasLedger test titles, not every test body.
+
+### Open findings after WS-04.5
+- Gas measurement is an approximation: the nonReentrant guard and the payout transfers after the record point are not counted, so recorded cost is slightly below real cost. The per-action cap and the 15% ceiling still bound exposure.
+- The final-milestone write-off is nearly unreachable: the ceiling (budget + 15% of netFunds) means overflow is at most the sum of the per-milestone 15% caps, so only rounding dust can remain. Kept as a safety net.
+- Registry defaults `maxCostPerAction` and `l1Surcharge` are 0. Until the guardian sets them (and adds the relayer) every relayer call records cost 0. This must be done after deployment (add to WS-04.8 / CON-04 checklist).
+- Before funding closes the ceiling is 0, so any relayer-submitted call with non-zero cost reverts with "Gas ceiling exceeded"; relayer must not be used pre-close (API should self-pay hint).
+- The distributor computes the cost and the escrow trusts it (only the project's distributor may call `recordSponsoredGas`); `action` is not range-checked. Acceptable because the distributor is deployed by the factory.
+- A reverting treasury address blocks `executeMilestone` when a deduction is above 0 (and `closeFundingAndStart`); the treasury is registry-controlled and rotatable. Already noted as a general risk.
+- 7 tests were removed (treasury-signature path no longer exists); their intent is covered by `GasLedger.ts` (permissionless execution, old selector gone). No security issue found in the diff.
+- ABI changes for WS-05 and IDX-10: `executeMilestone()` has no parameters; new `SponsoredGas`, `GasDebtRecovered`, `GasDebtWrittenOff`, new getters `gasBudget`, `gasSpent`, `gasRecovered`, `MAX_DEBT_BPS`, new `recordSponsoredGas`.
+
 ### Open findings after WS-04.4
 - ERC-1271 reentrancy test caveat: `does not let a malicious wallet re-enter during validation` is only partly meaningful, because OZ `SignatureChecker` calls the wallet with `staticcall`, which cannot change state. `nonReentrant` on `voteBySig` is defence in depth and is not independently proven by that test.
 - `contracts/mocks/MockERC1271Wallet.sol` is a test-only mock inside `contracts/`; it compiles into artifacts but is never deployed. Exclude it from deployment modules, size reviews and Slither scope (WS-04.7).
-- `stakeWithPermit` does not yet report sponsored gas to the escrow (design section 3 expects that); it arrives with the ledger in WS-04.5.
+- Resolved in WS-04.5: `stakeWithPermit` now reports sponsored gas to the escrow.
 - Permit domain name equals the token name chosen at launch; a front-end must read `name()` and `nonces()` from the token.
 
 ### Open findings after WS-04.3b
@@ -96,12 +112,15 @@ Verified by running `npm test` (`hardhat test`): **144 passing, 2 failing** (146
 4. [x] WS-04.3b registry, factory wiring, F1/F2 fixes (CON-02.1 to CON-02.4, CON-02.18, CON-02.19); F1/F2 tests green, baseline green (awaiting user review).
    [x] CON-02.21 resolved by removing the 120-day inactivity deadline (user decision 2026-10-28).
    [ ] CON-04.0 update Ignition modules and `scripts/` for the registry and new initializers (WS-04.8, user-run).
-5. [ ] Rest of CON-02 implementation, CON-03.1 to CON-03.7 and CON-03.9 (WS-04.7).
+5. [x] CON-02.10 to CON-02.14 gas ledger and parameterless `executeMilestone` (WS-04.5, awaiting review).
+   [ ] Rest of CON-02 implementation, CON-03.1 to CON-03.7 and CON-03.9 (WS-04.7).
 6. [ ] `[USER-ACTION]` CON-04 deploy to both testnets, fund and allow-list the relayer.
 
 ---
 
 ## Change log
+
+2026-10-28  WS-04.5  `executeMilestone()` parameterless and permissionless, treasury signature removed; gas ledger (`gasBudget`, `gasSpent`, `gasRecovered`, 15% cap), `recordSponsoredGas`, `SponsoredGas`/`GasDebtRecovered`/`GasDebtWrittenOff`; `SponsoredGasCost` library; claim, vote, stake and execute record relayer cost; 24 new tests, 7 removed; CON-02.10 to CON-02.14 ticked with wording notes  - verified by: tracker re-ran `npx hardhat compile` and `npm test` (244 passing, 0 failing), re-measured artifact sizes (MilestoneEscrow 14777), read `MilestoneEscrow.sol` in full plus the distributor, interface and library diffs and the GasLedger test titles (not every body); no `executeMilestone` callers left in `contracts/` besides the escrow
 
 2026-10-28  WS-04.4  `MilestoneEscrow` EIP-712 + `claimTokensFor` + `voteBySig`; `ProjectToken` ERC-2612 permit with `checkValidity`; `DividendDistributor.stakeWithPermit`; `contracts/mocks/MockERC1271Wallet.sol` (test-only); 32 new tests; CON-02.5 to CON-02.9 ticked with wording notes (no ClaimTokens/Stake/ExecuteMilestone structs, no nonce for votes)  - verified by: tracker ran `npx hardhat compile` and `npm test` (227 passing, 0 failing), re-measured artifact sizes (MilestoneEscrow 13266), read the full `git diff -- contracts` and the test titles (not the test bodies); `git ls-files --eol` shows LF in index and working copy, so no line-ending churn; reentrancy test is weak by construction (staticcall)
 

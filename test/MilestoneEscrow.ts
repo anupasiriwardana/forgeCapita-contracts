@@ -14,7 +14,6 @@ import {
   launchProject,
   networkHelpers,
   sendEth,
-  signGasDebt,
 } from "./helpers/protocol.js";
 
 const { time } = networkHelpers;
@@ -321,7 +320,7 @@ describe("MilestoneEscrow", function () {
 
     it("unlocks the voter's tokens once the milestone has executed", async function () {
       const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
-      await approveAndExecuteMilestone(project, 0n);
+      await approveAndExecuteMilestone(project);
 
       expect(await project.escrow.isUserVoteLocked(project.alice.address)).to.equal(false);
       await project.distributor.connect(project.alice).withdraw(1n);
@@ -333,7 +332,7 @@ describe("MilestoneEscrow", function () {
       const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
 
       const delta = await etherDelta(project.developer.address, () =>
-        approveAndExecuteMilestone(project, 0n),
+        approveAndExecuteMilestone(project),
       );
 
       expect(delta).to.equal(eth("3.8"));
@@ -342,90 +341,18 @@ describe("MilestoneEscrow", function () {
     it("emits MilestoneExecuted and advances to the next milestone", async function () {
       const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
 
-      await expect(approveAndExecuteMilestone(project, 0n))
+      await expect(approveAndExecuteMilestone(project))
         .to.emit(project.escrow, "MilestoneExecuted")
         .withArgs(0n, eth("3.8"), 0n, 0n);
       expect(await project.escrow.currentMilestoneIndex()).to.equal(1n);
       expect((await project.escrow.milestones(0)).isExecuted).to.equal(true);
     });
 
-    it("pays the signed gas debt to the treasury", async function () {
-      const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
-      const gasDebt = eth("0.1");
-
-      const treasuryDelta = await etherDelta(project.treasury.address, () =>
-        approveAndExecuteMilestone(project, 0n, gasDebt),
-      );
-
-      expect(treasuryDelta).to.equal(gasDebt);
-    });
-
-    it("pays the developer the payout minus the gas debt", async function () {
-      const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
-      const gasDebt = eth("0.1");
-
-      const developerDelta = await etherDelta(project.developer.address, () =>
-        approveAndExecuteMilestone(project, 0n, gasDebt),
-      );
-
-      expect(developerDelta).to.equal(eth("3.7"));
-    });
-
-    it("reports the recouped gas debt in the event", async function () {
-      const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
-
-      await expect(approveAndExecuteMilestone(project, 0n, eth("0.1")))
-        .to.emit(project.escrow, "MilestoneExecuted")
-        .withArgs(0n, eth("3.7"), 0n, eth("0.1"));
-    });
-
-    it("reverts when the gas debt exceeds the milestone payout", async function () {
-      const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
-
-      await expect(approveAndExecuteMilestone(project, 0n, eth("4"))).to.be.revertedWith(
-        "Gas debt exceeds milestone payout",
-      );
-    });
-
-    it("reverts when the gas debt signature is from someone other than the treasury", async function () {
-      const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
-      await project.escrow.connect(project.alice).vote(true);
-      await project.escrow.connect(project.bob).vote(true);
-      const forged = await signGasDebt(project, 0n, 0n, project.outsider);
-
-      await expect(project.escrow.executeMilestone(0n, forged)).to.be.revertedWith(
-        "Invalid gas debt signature",
-      );
-    });
-
-    it("reverts when the signed gas debt differs from the submitted one", async function () {
-      const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
-      await project.escrow.connect(project.alice).vote(true);
-      await project.escrow.connect(project.bob).vote(true);
-      const signature = await signGasDebt(project, 0n, eth("0.1"));
-
-      await expect(project.escrow.executeMilestone(eth("0.2"), signature)).to.be.revertedWith(
-        "Invalid gas debt signature",
-      );
-    });
-
-    it("reverts when the signature was made for another milestone index", async function () {
-      const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
-      await project.escrow.connect(project.alice).vote(true);
-      await project.escrow.connect(project.bob).vote(true);
-      const signature = await signGasDebt(project, 1n, 0n);
-
-      await expect(project.escrow.executeMilestone(0n, signature)).to.be.revertedWith(
-        "Invalid gas debt signature",
-      );
-    });
-
     it("reverts without enough yes votes before the voting period ends", async function () {
       const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
       await project.escrow.connect(project.alice).vote(true);
-      const signature = await signGasDebt(project, 0n, 0n);
 
-      await expect(project.escrow.executeMilestone(0n, signature)).to.be.revertedWith(
+      await expect(project.escrow.executeMilestone()).to.be.revertedWith(
         "Milestone approval conditions not met",
       );
     });
@@ -435,9 +362,8 @@ describe("MilestoneEscrow", function () {
       await project.escrow.connect(project.alice).vote(true);
       await project.escrow.connect(project.bob).vote(false);
       await time.increase(28 * DAY);
-      const signature = await signGasDebt(project, 0n, 0n);
 
-      await expect(project.escrow.executeMilestone(0n, signature)).to.emit(
+      await expect(project.escrow.executeMilestone()).to.emit(
         project.escrow,
         "MilestoneExecuted",
       );
@@ -448,9 +374,8 @@ describe("MilestoneEscrow", function () {
       await project.escrow.connect(project.alice).vote(false);
       await project.escrow.connect(project.bob).vote(true);
       await time.increase(28 * DAY);
-      const signature = await signGasDebt(project, 0n, 0n);
 
-      await expect(project.escrow.executeMilestone(0n, signature)).to.be.revertedWith(
+      await expect(project.escrow.executeMilestone()).to.be.revertedWith(
         "Milestone approval conditions not met",
       );
     });
@@ -460,19 +385,17 @@ describe("MilestoneEscrow", function () {
       await project.distributor.connect(project.carol).withdraw(140n * ONE_TOKEN);
       await project.escrow.connect(project.carol).vote(true);
       await time.increase(28 * DAY);
-      const signature = await signGasDebt(project, 0n, 0n);
 
-      await expect(project.escrow.executeMilestone(0n, signature)).to.be.revertedWith(
+      await expect(project.escrow.executeMilestone()).to.be.revertedWith(
         "Milestone approval conditions not met",
       );
     });
 
     it("reverts when voting is not open", async function () {
       const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
-      await approveAndExecuteMilestone(project, 0n);
-      const signature = await signGasDebt(project, 1n, 0n);
+      await approveAndExecuteMilestone(project);
 
-      await expect(project.escrow.executeMilestone(0n, signature)).to.be.revertedWith(
+      await expect(project.escrow.executeMilestone()).to.be.revertedWith(
         "Voting is not open",
       );
     });
@@ -482,9 +405,8 @@ describe("MilestoneEscrow", function () {
       await project.escrow.connect(project.alice).vote(true);
       await project.escrow.connect(project.bob).vote(true);
       await time.increase(200 * DAY);
-      const signature = await signGasDebt(project, 0n, 0n);
 
-      await expect(project.escrow.executeMilestone(0n, signature)).to.emit(
+      await expect(project.escrow.executeMilestone()).to.emit(
         project.escrow,
         "MilestoneExecuted",
       );
@@ -492,15 +414,14 @@ describe("MilestoneEscrow", function () {
 
     it("keeps the quorum path reachable when a later milestone starts after 120 days", async function () {
       const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
-      await approveAndExecuteMilestone(project, 0n);
+      await approveAndExecuteMilestone(project);
       await time.increase(200 * DAY);
       await project.escrow.connect(project.developer).startMilestone(1);
       await project.escrow.connect(project.alice).vote(true);
       await project.escrow.connect(project.bob).vote(false);
       await time.increase(28 * DAY);
-      const signature = await signGasDebt(project, 1n, 0n);
 
-      await expect(project.escrow.executeMilestone(0n, signature)).to.emit(
+      await expect(project.escrow.executeMilestone()).to.emit(
         project.escrow,
         "MilestoneExecuted",
       );
@@ -509,20 +430,19 @@ describe("MilestoneEscrow", function () {
     it("reverts on a cancelled project", async function () {
       const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
       await project.escrow.connect(project.developer).cancelProject("stop");
-      const signature = await signGasDebt(project, 0n, 0n);
 
-      await expect(project.escrow.executeMilestone(0n, signature)).to.be.revertedWith(
+      await expect(project.escrow.executeMilestone()).to.be.revertedWith(
         "Project cancelled",
       );
     });
 
     it("vests the 20% developer tokens on the final milestone", async function () {
       const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
-      await approveAndExecuteMilestone(project, 0n);
+      await approveAndExecuteMilestone(project);
       await project.escrow.connect(project.developer).startMilestone(1);
       expect(await project.token.balanceOf(project.developer.address)).to.equal(0n);
 
-      await expect(approveAndExecuteMilestone(project, 1n))
+      await expect(approveAndExecuteMilestone(project))
         .to.emit(project.escrow, "MilestoneExecuted")
         .withArgs(1n, eth("5.7"), DEVELOPER_SUPPLY, 0n);
 
@@ -623,14 +543,13 @@ describe("MilestoneEscrow", function () {
       await escrow.connect(alice).vote(true);
       await escrow.connect(bob).vote(true);
       expect(await escrow.isUserVoteLocked(alice.address)).to.equal(true);
-      const signature = await signGasDebt(project, 0n, 0n);
       await escrow.connect(treasury).cancelProject("developer stalled");
 
       expect(await escrow.isUserVoteLocked(alice.address)).to.equal(false);
       await expect(escrow.connect(alice).vote(true)).to.be.revertedWith(
         "Project has been cancelled",
       );
-      await expect(escrow.executeMilestone(0n, signature)).to.be.revertedWith("Project cancelled");
+      await expect(escrow.executeMilestone()).to.be.revertedWith("Project cancelled");
     });
 
     it("lets holders refund pro-rata after a guardian cancel without sweeping the ETH", async function () {

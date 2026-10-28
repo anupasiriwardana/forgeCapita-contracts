@@ -7,7 +7,6 @@ import {
   launchAndStartMilestoneProject,
   launchProject,
   networkHelpers,
-  signGasDebt,
 } from "./helpers/protocol.js";
 
 type Project = Awaited<ReturnType<typeof launchProject>>;
@@ -68,24 +67,22 @@ describe("Registry integration", function () {
       expect(delta).to.equal(ethers.parseEther("0.5"));
     });
 
-    it("pays the gas debt to the new treasury and requires its signature", async function () {
+    it("pays a gas-debt deduction to the new treasury", async function () {
       const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
-      const { registry, treasury, escrow, alice, bob, outsider } = project;
-      await rotateTreasury(registry, treasury, outsider);
+      const { registry, treasury, escrow, alice, bob, outsider, carol } = project;
+      await registry.connect(treasury).setRelayer(carol.address, true);
+      await registry.connect(treasury).setMaxCostPerAction(ethers.parseEther("1"));
+      // the 0.5 ETH budget is exceeded by the 0.6 ETH Execute surcharge alone
+      await registry.connect(treasury).setL1Surcharge(3, ethers.parseEther("0.6"));
       await escrow.connect(alice).vote(true);
       await escrow.connect(bob).vote(true);
-      const gasDebt = ethers.parseEther("0.1");
+      await rotateTreasury(registry, treasury, outsider);
 
-      const oldSignature = await signGasDebt(project, 0n, gasDebt);
-      await expect(escrow.executeMilestone(gasDebt, oldSignature)).to.be.revertedWith(
-        "Invalid gas debt signature",
-      );
+      const delta = await etherDelta(outsider.address, () => escrow.connect(carol).executeMilestone());
 
-      const newSignature = await signGasDebt(project, 0n, gasDebt, outsider);
-      const delta = await etherDelta(outsider.address, () =>
-        escrow.executeMilestone(gasDebt, newSignature),
-      );
-      expect(delta).to.equal(gasDebt);
+      const overflow = (await escrow.gasSpent()) - (await escrow.gasBudget());
+      expect(overflow > ethers.parseEther("0.1")).to.equal(true);
+      expect(delta).to.equal(overflow);
     });
 
     it("sends router treasury funds to the new treasury", async function () {

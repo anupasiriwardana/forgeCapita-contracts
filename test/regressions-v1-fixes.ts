@@ -56,11 +56,11 @@ describe("Regressions: v1 fixes", function () {
       const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
       const { escrow, developer } = project;
 
-      await expect(approveAndExecuteMilestone(project, 0n)).to.not.emit(escrow, "ProjectCompleted");
+      await expect(approveAndExecuteMilestone(project)).to.not.emit(escrow, "ProjectCompleted");
       expect(await escrow.completed()).to.equal(false);
 
       await escrow.connect(developer).startMilestone(1);
-      await expect(approveAndExecuteMilestone(project, 1n)).to.emit(escrow, "ProjectCompleted");
+      await expect(approveAndExecuteMilestone(project)).to.emit(escrow, "ProjectCompleted");
       expect(await escrow.completed()).to.equal(true);
     });
 
