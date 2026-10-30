@@ -18,6 +18,10 @@ contract RevenueRouter is Initializable, ReentrancyGuard {
     event PaymentReceived(address indexed customer, uint256 amountPaid, uint256 creatorCut, uint256 investorCut, uint256 platformFee);
     event FundsClaimed(address indexed claimant, uint256 amount);
 
+    constructor() {
+        _disableInitializers();
+    }
+
     function initialize(
         address _milestoneEscrow,
         address payable _dividendDistributor,

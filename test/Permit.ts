@@ -139,7 +139,8 @@ describe("DividendDistributor stakeWithPermit", function () {
 
   it("still stakes when the permit was front-run and the allowance suffices", async function () {
     const project = await networkHelpers.loadFixture(launchAndClaimProject);
-    const { token, distributor, alice, outsider } = project;
+    const { token, registry, treasury, distributor, alice, outsider } = project;
+    await registry.connect(treasury).setRelayer(outsider.address, true);
     const spender = await distributor.getAddress();
     const amount = 100n * ONE_TOKEN;
     const deadline = await futureDeadline();
@@ -157,7 +158,7 @@ describe("DividendDistributor stakeWithPermit", function () {
 
   it("fails cleanly when the permit is invalid and there is no allowance", async function () {
     const project = await networkHelpers.loadFixture(launchAndClaimProject);
-    const { token, distributor, alice, bob, outsider } = project;
+    const { distributor, alice, bob, outsider } = project;
     const spender = await distributor.getAddress();
     const amount = 100n * ONE_TOKEN;
     const deadline = await futureDeadline();
@@ -167,7 +168,7 @@ describe("DividendDistributor stakeWithPermit", function () {
       distributor
         .connect(outsider)
         .stakeWithPermit(alice.address, amount, deadline, bobSig.v, bobSig.r, bobSig.s),
-    ).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
+    ).to.be.revertedWith("Permit failed");
     expect(await distributor.stakedBalance(alice.address)).to.equal(0n);
   });
 
@@ -189,7 +190,7 @@ describe("DividendDistributor stakeWithPermit", function () {
 
   it("fails after emergency invalidation", async function () {
     const project = await networkHelpers.loadFixture(launchAndClaimProject);
-    const { escrow, treasury, distributor, alice, outsider } = project;
+    const { escrow, treasury, distributor, alice } = project;
     const amount = 10n * ONE_TOKEN;
     const deadline = await futureDeadline();
     const sig = await signPermit(project, alice, await distributor.getAddress(), amount, deadline);
@@ -197,7 +198,7 @@ describe("DividendDistributor stakeWithPermit", function () {
 
     await expect(
       distributor
-        .connect(outsider)
+        .connect(alice)
         .stakeWithPermit(alice.address, amount, deadline, sig.v, sig.r, sig.s),
     ).to.be.revertedWith("Token is dead (Emergency Shutdown)");
   });

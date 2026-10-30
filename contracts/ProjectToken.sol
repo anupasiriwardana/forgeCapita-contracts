@@ -11,6 +11,10 @@ contract ProjectToken is Initializable, ERC20Upgradeable, ERC20PermitUpgradeable
 
     event TokenInvalidated();
 
+    constructor() {
+        _disableInitializers();
+    }
+
     function initialize(
         string memory name, 
         string memory symbol, 
@@ -54,7 +58,8 @@ contract ProjectToken is Initializable, ERC20Upgradeable, ERC20PermitUpgradeable
         super.permit(owner, spender, value, deadline, v, r, s);
     }
 
-    function burn(uint256 amount) external {
+    /// @dev Owner (the escrow) only, so holders cannot burn tokens out of the refund accounting.
+    function burn(uint256 amount) external onlyOwner {
         _burn(_msgSender(), amount);
     }
 

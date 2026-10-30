@@ -207,7 +207,7 @@ describe("Signed actions: coverage additions", function () {
         distributor
           .connect(outsider)
           .stakeWithPermit(alice.address, amount, deadline, sig.v, sig.r, sig.s),
-      ).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
+      ).to.be.revertedWith("Permit failed");
       expect(await distributor.stakedBalance(alice.address)).to.equal(amount);
       expect(await token.nonces(alice.address)).to.equal(1n);
     });
@@ -224,11 +224,11 @@ describe("Signed actions: coverage additions", function () {
         distributor
           .connect(outsider)
           .stakeWithPermit(alice.address, amount, deadline, sig.v, sig.r, sig.s),
-      ).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
+      ).to.be.revertedWith("Permit failed");
 
       await token.connect(alice).approve(spender, amount);
       await distributor
-        .connect(outsider)
+        .connect(alice)
         .stakeWithPermit(alice.address, amount, deadline, sig.v, sig.r, sig.s);
       expect(await distributor.stakedBalance(alice.address)).to.equal(amount);
       expect(await token.nonces(alice.address)).to.equal(0n);
@@ -250,7 +250,7 @@ describe("Signed actions: coverage additions", function () {
           distributor
             .connect(outsider)
             .stakeWithPermit(alice.address, amount, deadline, sig.v, sig.r, sig.s),
-        ).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
+        ).to.be.revertedWith("Permit failed");
       }
       expect(await distributor.totalStaked()).to.equal(0n);
       expect(await token.nonces(alice.address)).to.equal(0n);
@@ -267,7 +267,7 @@ describe("Signed actions: coverage additions", function () {
         distributor
           .connect(outsider)
           .stakeWithPermit(alice.address, amount * 2n, deadline, sig.v, sig.r, sig.s),
-      ).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
+      ).to.be.revertedWith("Permit failed");
     });
 
     it("credits the stake to the owner, never to the submitter, including for a relayer", async function () {

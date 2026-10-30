@@ -32,6 +32,10 @@ contract DividendDistributor is Initializable, ReentrancyGuard {
     event YieldClaimed(address indexed user, uint256 amount);
     event EscrowLinked(address indexed escrow);
 
+    constructor() {
+        _disableInitializers();
+    }
+
     function initialize(address _projectToken, address _factory, address _registry) public initializer {
         projectToken = IERC20(_projectToken);
         factory = _factory;
@@ -71,7 +75,8 @@ contract DividendDistributor is Initializable, ReentrancyGuard {
     }
 
     /// @notice Stakes `owner`'s tokens using their ERC-2612 permit. Callable by anyone (e.g. a relayer).
-    /// A permit that was already consumed (front-run) is tolerated as long as the allowance suffices.
+    /// A failed permit (for example one already consumed by a front-runner) is tolerated only for the owner
+    /// or an allow-listed relayer, who then rely on the existing allowance; anyone else reverts.
     /// When the caller is an allow-listed relayer the cost is reported to the escrow's gas ledger.
     function stakeWithPermit(
         address owner,
@@ -82,10 +87,13 @@ contract DividendDistributor is Initializable, ReentrancyGuard {
         bytes32 s
     ) external nonReentrant {
         uint256 gasAtEntry = gasleft();
+        bool relayer = registry.isRelayer(msg.sender);
         _updateDividend(owner);
-        try IERC20Permit(address(projectToken)).permit(owner, address(this), amount, deadline, v, r, s) {} catch {}
+        try IERC20Permit(address(projectToken)).permit(owner, address(this), amount, deadline, v, r, s) {} catch {
+            require(msg.sender == owner || relayer, "Permit failed");
+        }
         _stake(owner, amount);
-        if (registry.isRelayer(msg.sender)) {
+        if (relayer) {
             IMilestoneEscrow(milestoneEscrow).recordSponsoredGas(
                 msg.sender,
                 owner,

@@ -31,7 +31,22 @@ export async function deployProtocol() {
   ]);
   const p2p = await ethers.getContractAt("P2PExchange", await factory.p2pExchange());
 
-  return { deployer, treasury, developer, alice, bob, carol, outsider, registry, factory, p2p };
+  return {
+    deployer,
+    treasury,
+    developer,
+    alice,
+    bob,
+    carol,
+    outsider,
+    registry,
+    factory,
+    p2p,
+    masterToken,
+    masterEscrow,
+    masterDistributor,
+    masterRouter,
+  };
 }
 
 export async function launchProject() {

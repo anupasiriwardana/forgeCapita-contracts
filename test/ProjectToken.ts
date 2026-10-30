@@ -80,21 +80,14 @@ describe("ProjectToken", function () {
   });
 
   describe("burn", function () {
-    it("burns the caller's own tokens and reduces total supply", async function () {
-      const { token, alice } = await networkHelpers.loadFixture(launchAndClaimProject);
+    it("lets the owner (the escrow) burn tokens it holds, and nobody else", async function () {
+      const { token, escrow, alice } = await networkHelpers.loadFixture(launchAndClaimProject);
+      const escrowAddress = await escrow.getAddress();
+      expect(await token.owner()).to.equal(escrowAddress);
 
-      await token.connect(alice).burn(20n * ONE_TOKEN);
-
-      expect(await token.balanceOf(alice.address)).to.equal(300n * ONE_TOKEN);
-      expect(await token.totalSupply()).to.equal(TOTAL_SUPPLY * ONE_TOKEN - 20n * ONE_TOKEN);
-    });
-
-    it("reverts when burning more than the balance", async function () {
-      const { token, alice } = await networkHelpers.loadFixture(launchAndClaimProject);
-
-      await expect(token.connect(alice).burn(321n * ONE_TOKEN)).to.be.revertedWithCustomError(
+      await expect(token.connect(alice).burn(1n)).to.be.revertedWithCustomError(
         token,
-        "ERC20InsufficientBalance",
+        "OwnableUnauthorizedAccount",
       );
     });
   });

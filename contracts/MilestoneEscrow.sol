@@ -13,6 +13,7 @@ import "./libraries/SponsoredGasCost.sol";
 interface IProjectToken is IERC20 {
     function emergencyInvalidate() external;
     function burn(uint256 amount) external;
+    function isInvalidated() external view returns (bool);
 }
 
 contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
@@ -35,6 +36,8 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
     bool public isFundingActive;
     bool public projectCancelled;
     bool public completed;
+    /// @notice Timestamp at which projectCancelled was set (0 while not cancelled).
+    uint256 public cancelledAt;
 
     uint256 public fundingGoal;
     uint256 public fundingDeadline;
@@ -49,6 +52,9 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
     uint256 public constant MAX_FREEZE_DURATION = 45 days;
     /// @notice Cap on the cumulative time a project can ever be frozen.
     uint256 public constant MAX_TOTAL_FREEZE = 90 days;
+    /// @notice After a cancel the guardian may shut the project down only when every public token is
+    /// refunded or this long has passed since the cancel.
+    uint256 public constant REFUND_WINDOW = 90 days;
 
     /// @dev Registry action kinds (Claim, Stake, Vote, Execute = 0..3).
     uint8 private constant ACTION_CLAIM = 0;
@@ -114,6 +120,8 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
     );
     event GasDebtWrittenOff(uint256 amount);
     event ProjectCancelled(string reason);
+    /// @notice Voting ended without approval; the project is cancelled and refunds open.
+    event MilestoneFailed(uint256 index);
     event ProjectCompleted();
     event RefundClaimed(address indexed backer, uint256 amount);
     event PlatformFeeCollected(uint256 amount);
@@ -135,7 +143,9 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
     /// @dev `totalFrozen` is the actual cumulative frozen time after this early unfreeze.
     event MilestonesUnfrozen(uint256 totalFrozen);
 
-    constructor() EIP712("ForgeCapita MilestoneEscrow", "1") {}
+    constructor() EIP712("ForgeCapita MilestoneEscrow", "1") {
+        _disableInitializers();
+    }
 
     function initialize(
         address _projectToken,
@@ -316,6 +326,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
 
         Milestone storage milestone = milestones[currentMilestoneIndex];
         require(milestone.isVotingOpen, "Voting is not open");
+        require(block.timestamp < milestone.votingStartTime + VOTING_PERIOD, "Voting period ended");
         require(!hasVoted[currentMilestoneIndex][voter], "Already voted");
 
         uint256 voterWeight = dividendDistributor.stakedBalance(voter);
@@ -331,26 +342,32 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
     /// @notice Executes the current milestone once approved. Callable by anyone.
     /// Sponsored gas above the budget is repaid to the treasury from the payout (at most 15% of it);
     /// the remainder carries to the next milestone and is written off after the final one.
+    /// Once the voting period has ended without approval the call does not revert: it cancels the
+    /// project (refunds open), emits MilestoneFailed, pays nobody and books no gas.
     function executeMilestone() external nonReentrant {
         uint256 gasAtEntry = gasleft();
         require(!projectCancelled, "Project cancelled");
-        require(!isFrozen(), "Milestones frozen");
 
         uint256 index = currentMilestoneIndex;
         Milestone storage milestone = milestones[index];
         require(milestone.isVotingOpen, "Voting is not open");
 
         bool fastTrackPassed = milestone.yesVotes > (publicSupply / 2);
-        bool quorumPassed = (block.timestamp >=
-            milestone.votingStartTime + VOTING_PERIOD) &&
+        bool votingEnded = block.timestamp >=
+            milestone.votingStartTime + VOTING_PERIOD;
+        bool quorumPassed = votingEnded &&
             ((milestone.yesVotes + milestone.noVotes) >=
                 (publicSupply * QUORUM_PERCENT) / 100) &&
             (milestone.yesVotes > milestone.noVotes);
 
-        require(
-            fastTrackPassed || quorumPassed,
-            "Milestone approval conditions not met"
-        );
+        if (!fastTrackPassed && !quorumPassed) {
+            require(votingEnded, "Milestone approval conditions not met");
+            projectCancelled = true;
+            cancelledAt = block.timestamp;
+            emit MilestoneFailed(index);
+            return;
+        }
+        require(!isFrozen(), "Milestones frozen");
 
         bool isFinalMilestone = (index == milestones.length - 1);
 
@@ -522,6 +539,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
         require(!projectCancelled, "Project already cancelled");
         require(!completed, "Project is completed");
         projectCancelled = true;
+        cancelledAt = block.timestamp;
         emit ProjectCancelled(reason);
     }
 
@@ -580,10 +598,18 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
             msg.sender == registry.guardian(),
             "Only Guardian can trigger emergency shutdown"
         );
-        require(!projectCancelled, "Project already cancelled");
+        require(!projectToken.isInvalidated(), "Already shut down");
+        if (projectCancelled) {
+            require(
+                remainingPublicTokens == 0 || block.timestamp >= cancelledAt + REFUND_WINDOW,
+                "Refunds still open"
+            );
+        } else {
+            projectCancelled = true;
+            cancelledAt = block.timestamp;
+        }
 
         isFundingActive = false;
-        projectCancelled = true;
 
         // 1. Total Supply Wipe (Global Invalidation)
         projectToken.emergencyInvalidate();

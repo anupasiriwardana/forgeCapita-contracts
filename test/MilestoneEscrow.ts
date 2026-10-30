@@ -375,9 +375,10 @@ describe("MilestoneEscrow", function () {
       await project.escrow.connect(project.bob).vote(true);
       await time.increase(28 * DAY);
 
-      await expect(project.escrow.executeMilestone()).to.be.revertedWith(
-        "Milestone approval conditions not met",
-      );
+      await expect(project.escrow.executeMilestone())
+        .to.emit(project.escrow, "MilestoneFailed")
+        .withArgs(0n);
+      expect(await project.escrow.projectCancelled()).to.equal(true);
     });
 
     it("rejects the quorum path when turnout is below 20%", async function () {
@@ -386,9 +387,10 @@ describe("MilestoneEscrow", function () {
       await project.escrow.connect(project.carol).vote(true);
       await time.increase(28 * DAY);
 
-      await expect(project.escrow.executeMilestone()).to.be.revertedWith(
-        "Milestone approval conditions not met",
-      );
+      await expect(project.escrow.executeMilestone())
+        .to.emit(project.escrow, "MilestoneFailed")
+        .withArgs(0n);
+      expect(await project.escrow.projectCancelled()).to.equal(true);
     });
 
     it("reverts when voting is not open", async function () {
@@ -804,13 +806,13 @@ describe("MilestoneEscrow", function () {
       expect(await token.isInvalidated()).to.equal(true);
     });
 
-    it("reverts when the project is already cancelled", async function () {
+    it("reverts on a cancelled project while refunds are still open", async function () {
       const { escrow, developer, treasury } =
         await networkHelpers.loadFixture(launchAndClaimProject);
       await escrow.connect(developer).cancelProject("stop");
 
       await expect(escrow.connect(treasury).emergencyShutdown()).to.be.revertedWith(
-        "Project already cancelled",
+        "Refunds still open",
       );
     });
   });

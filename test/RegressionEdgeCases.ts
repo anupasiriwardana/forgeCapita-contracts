@@ -159,7 +159,8 @@ describe("Regression: edge cases of unchanged behaviour", function () {
       await project.escrow.connect(project.alice).vote(true);
       await time.increase(28 * DAY);
 
-      await expect(project.escrow.executeMilestone()).to.be.revertedWith(NOT_APPROVED);
+      await expect(project.escrow.executeMilestone()).to.emit(project.escrow, "MilestoneFailed");
+      expect(await project.escrow.projectCancelled()).to.equal(true);
     });
 
     it("rejects a tie between yes and no after 28 days", async function () {
@@ -169,7 +170,8 @@ describe("Regression: edge cases of unchanged behaviour", function () {
       await project.escrow.connect(project.bob).vote(false);
       await time.increase(28 * DAY);
 
-      await expect(project.escrow.executeMilestone()).to.be.revertedWith(NOT_APPROVED);
+      await expect(project.escrow.executeMilestone()).to.emit(project.escrow, "MilestoneFailed");
+      expect(await project.escrow.projectCancelled()).to.equal(true);
     });
 
     it("opens the quorum path exactly 28 days after voting started, not a second earlier", async function () {
