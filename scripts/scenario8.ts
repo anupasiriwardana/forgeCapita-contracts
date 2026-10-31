@@ -15,8 +15,11 @@ async function main() {
   const Router = await ethers.getContractFactory("RevenueRouter");
   const masterRouter = await Router.deploy();
 
+  const Registry = await ethers.getContractFactory("ForgeCapitaRegistry");
+  const registry = await Registry.deploy(treasury.address);
+
   const Factory = await ethers.getContractFactory("ForgeCapitaFactory");
-  const factory = await Factory.deploy(masterToken.target, masterEscrow.target, masterDistributor.target, masterRouter.target, treasury.address);
+  const factory = await Factory.deploy(masterToken.target, masterEscrow.target, masterDistributor.target, masterRouter.target, registry.target);
 
   const tx = await factory.connect(dev).launchProject("SaaS", "SAS", 1000000n, ["M0"], [100n], ethers.parseEther("10"), 30n);
   const receipt = await tx.wait();

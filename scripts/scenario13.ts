@@ -22,13 +22,16 @@ async function main() {
     const Router = await ethers.getContractFactory("RevenueRouter");
     const masterRouter = await Router.deploy();
 
+    const Registry = await ethers.getContractFactory("ForgeCapitaRegistry");
+    const registry = await Registry.deploy(treasury.address);
+
     const Factory = await ethers.getContractFactory("ForgeCapitaFactory");
     const factory = await Factory.deploy(
         await masterToken.getAddress(),
         await masterEscrow.getAddress(),
         await masterDistributor.getAddress(),
         await masterRouter.getAddress(),
-        treasury.address
+        await registry.getAddress()
     );
 
     // 2. Launch Project via Factory

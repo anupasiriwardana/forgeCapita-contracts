@@ -5,7 +5,18 @@
 **Last Updated:** 2026-10-31
 **Location of this file:** moved here from the workspace root on 2026-10-28.
 
-**Current focus:** Step: WS-04.7d (third reviewer round: stuck funding, freeze vs voting, shutdown via cancel) | State: WS-04.7c/7d done and reviewed; CON-03.10 CONFIRMED 2026-10-31; WS-04.8 ready (not started) | Updated: 2026-10-31
+**Current focus:** Step: WS-04.8 part 1 (CON-04.0 done) | State: blocked (waiting for user actions) | Updated: 2026-10-31
+
+## BLOCKED - WS-04.8
+Why: the remaining items are deployment and key handling; Claude never deploys.
+You need to do:
+1. CON-02.20: move the deployer key to the Hardhat keystore (`npx hardhat keystore set <NAME>`, referenced via `configVariable`); never paste the key in chat.
+2. CON-04.1: fund the deployer on Arbitrum Sepolia and BSC Testnet and run the deployment yourself (Claude never deploys).
+3. CON-04.2: verify on Arbiscan/BscScan; record factory, registry, P2P and implementation addresses plus start blocks in `forgecapita-contracts/docs/deployments-v2.md`.
+4. CON-04.3a: as Guardian on each chain, set `maxCostPerAction` and `l1Surcharge` (edit and run `scripts/postDeployConfig.ts`; set REGISTRY_ADDRESS and RELAYER_ADDRESS first).
+5. CON-04.3: generate and fund the relayer address on both chains and allow-list it with `setRelayer` (Guardian).
+How to confirm (no secrets in chat): share addresses, tx hashes and registry read values (`maxCostPerAction`, `isRelayer`).
+Then run: /next-task WS-04.8
 
 ## Decision 2026-10-31: CON-03.10 CONFIRMED by the user; WS-04.8 unblocked
 Margin 50%. BSC Testnet (97): maxCostPerAction 3.5e14 wei (default; Guardian may raise to 1e15 if gas nears 3 gwei), all four l1Surcharge 0. Arbitrum Sepolia (421614): maxCostPerAction 2e14 wei; l1Surcharge about 6.04e13 (Claim), 6.01e13 (Stake), 6.02e13 (Vote), 6.03e13 (Execute). Guardian-only registry settings (setMaxCostPerAction / setL1Surcharge, 1 ETH cap), changeable any time without redeploy; they are set by the user/Guardian after deployment as a [USER-ACTION] (CON-04.3a). WS-04.8 starts with CON-04.0, then the deploy USER-ACTIONs. Not started.
@@ -283,6 +294,7 @@ Verified by running `npm test` (`hardhat test`): **144 passing, 2 failing** (146
 ---
 
 ## Change log
+2026-10-31  CON-04.0  Deployment modules/scripts updated for the registry (registry -> 4 masters -> factory; `deploy.ts`, scenarios, new `postDeployConfig.ts`); CON-04.0 ticked, optional CON-04.0a added for stale demo scenarios/testGuide; remaining WS-04.8 items BLOCKED on user  - verified by: read ForgeCapitaFactory.ts, postDeployConfig.ts and grep of deploy.ts; `npx hardhat test` 415 passing; Ignition/scripts not executed, scenario1-13 edits and tsc errors not individually verified
 2026-10-31  CON-03.10  Ticked; user confirmed margin 50% and per-chain registry values; WS-04.8 unblocked; new USER-ACTION CON-04.3a (set values after deploy)  - verified by: user statement; docs edit only, no code touched
 2026-10-31  docs  CON-03.7 ticked (second reviewer re-check of final code incl. WS-04.7d passed; user committed WS-04.7d); WS-04.7c/7d marked done and reviewed; CON-03.10 suggestions recorded as SUGGESTED only; WS-04.8 blocked only on CON-03.10  - verified by: user report, not verified by tracker; docs edit only, no code touched
 2026-10-31  docs  Recorded user decision: shutdown of a COMPLETED project keeps setting `projectCancelled` and `cancelledAt`; open question closed; WS-05 note added to ROADMAP  - verified by: docs edit only, no code touched

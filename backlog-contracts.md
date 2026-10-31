@@ -170,7 +170,9 @@ Users should not pay gas for four actions: **claim tokens, stake, vote, execute 
 
 ## Phase 4: Deployment & handover
 
-- [ ] **CON-04.0** Update the Ignition modules and `scripts/` for the registry and the new initializers (v2 deployment prep, user-run). They still deploy the old factory and call old initializer signatures; deploy the registry first and pass its address to the factory.
+- [x] **CON-04.0** Update the Ignition modules and `scripts/` for the registry and the new initializers (v2 deployment prep, user-run). They still deploy the old factory and call old initializer signatures; deploy the registry first and pass its address to the factory.
+  Done 2026-10-31: `ignition/modules/ForgeCapitaFactory.ts` (registry, 4 masters, factory), `scripts/deploy.ts`, scenario scripts, new `scripts/postDeployConfig.ts`. Ignition/scripts NOT executed. Caveats: `ignition/modules/RevenueRouter.ts` is now an unreferenced no-arg standalone master (user may delete); `scripts/postDeployConfig.ts` has zero-address TODO constants (registry, relayer) that make it throw until edited.
+- [ ] **CON-04.0a** (optional) Fix stale demo scripts: `npx tsc --noEmit` still errors on pre-existing calls (scenario2 l.65, scenario3 l.61/71/81, scenario8 l.50/61, scenario12 l.49 pass args to a no-arg method; scenario13 l.53 missing ethers import) plus generated-types errors; update stale v2 wording in `scripts/testGuide.md`.
 - [ ] **CON-04.1 `[USER-ACTION]`** Provide a funded deployer key for both testnets (local use only, never in chat) and run the deployment yourself; Claude never deploys.
 - [ ] **CON-04.2 `[USER-ACTION]`** Deploy v2 to Arbitrum Sepolia and BSC Testnet, verify on Arbiscan/BscScan, and record factory, P2P and implementation addresses plus start blocks in `docs/deployments-v2.md`.
 - [ ] **CON-04.3a `[USER-ACTION]`** After deployment, as Guardian, set the confirmed CON-03.10 registry values on each chain (setMaxCostPerAction, setL1Surcharge per action: BSC 3.5e14 / surcharges 0; Arbitrum Sepolia 2e14 / about 6.04e13, 6.01e13, 6.02e13, 6.03e13 for Claim/Stake/Vote/Execute). Until set, relayer calls record cost 0.

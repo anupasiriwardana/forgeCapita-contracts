@@ -1,11 +1,12 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 
+/**
+ * Standalone RevenueRouter master implementation (no-arg constructor; per-project routers are
+ * clones initialised by the Factory). The full deployment flow lives in ForgeCapitaFactory.ts,
+ * which already deploys this master; use this module only to deploy the master on its own.
+ */
 const RevenueRouterModule = buildModule("RevenueRouterModule", (m) => {
-  // Hardhat gives us 20 fake accounts. We will use Account #1 as our "Creator" for local testing.
-  const creatorAddress = m.getAccount(1); 
-
-  // Deploy the contract, passing the creator's address into the constructor
-  const router = m.contract("RevenueRouter", [creatorAddress]);
+  const router = m.contract("RevenueRouter");
 
   return { router };
 });

@@ -25,13 +25,17 @@ async function main() {
   const masterRouter = await Router.deploy();
   await masterRouter.waitForDeployment();
 
+  const Registry = await ethers.getContractFactory("ForgeCapitaRegistry");
+  const registry = await Registry.deploy(treasury.address);
+  await registry.waitForDeployment();
+
   const Factory = await ethers.getContractFactory("ForgeCapitaFactory");
   const factory = await Factory.deploy(
     masterToken.target,
     masterEscrow.target,
     masterDistributor.target,
     masterRouter.target,
-    treasury.address
+    registry.target
   );
   await factory.waitForDeployment();
 

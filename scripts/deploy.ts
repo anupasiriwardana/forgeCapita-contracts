@@ -13,9 +13,15 @@ async function main() {
         throw new Error("Deployer account has 0 ETH. Please use a faucet.");
     }
 
-    const treasuryAddress = deployer.address;
+    console.log("1. Deploying ForgeCapitaRegistry...");
+    console.log(`  Admin (initial treasury AND Guardian) = deployer: ${deployer.address}`);
+    const Registry = await ethers.getContractFactory("ForgeCapitaRegistry");
+    const registry = await Registry.deploy(deployer.address);
+    await registry.waitForDeployment();
+    const registryAddress = await registry.getAddress();
+    console.log(`  ForgeCapitaRegistry deployed to: ${registryAddress}`);
 
-    console.log("1. Deploying Master Implementation Contracts...");
+    console.log("\n2. Deploying Master Implementation Contracts...");
     
     const Token = await ethers.getContractFactory("ProjectToken");
     const masterToken = await Token.deploy();
@@ -38,14 +44,14 @@ async function main() {
     console.log(`  Master Router deployed to:      ${masterRouter.target}`);
 
 
-    console.log("\n2. Deploying ForgeCapitaFactory (Proxy Router)...");
+    console.log("\n3. Deploying ForgeCapitaFactory (Proxy Router)...");
     const Factory = await ethers.getContractFactory("ForgeCapitaFactory");
     const factory = await Factory.deploy(
         masterToken.target,
         masterEscrow.target,
         masterDistributor.target,
         masterRouter.target,
-        treasuryAddress
+        registryAddress
     );
     
     await factory.waitForDeployment();
@@ -54,6 +60,7 @@ async function main() {
 
     console.log(`  ForgeCapitaFactory deployed to: ${factoryAddress}`);
     console.log(`  P2PExchange automatically deployed to: ${p2pAddress}`);
+    console.log("\nNext: the Guardian (deployer) must run scripts/postDeployConfig.ts to set the relayer and gas caps.");
 }
 
 main().catch((error) => {
