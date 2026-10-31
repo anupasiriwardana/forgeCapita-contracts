@@ -183,12 +183,12 @@ Users should not pay gas for four actions: **claim tokens, stake, vote, execute 
 - [x] **CON-04.3 `[USER-ACTION]`** Fund the relayer address on both chains and allow-list it via the treasury wallet (script or explorer write).
   USER-REPORTED done 2026-11-01: relayer wallet created, funded and allow-listed. Public address `0x8a1Be9d8fd97658b6b0B8b537374FF6c3E41815b`. setRelayer tx: Arbitrum Sepolia `0x73a1615d7d0dd992e9e23b0311d6adca8c1c23a367edfee1db38b5b7ec06759d`, BSC Testnet `0x1825ef8dbe33d7c559453b492820f0892e5ba7be0149e656f801394ca71d2f72`. Not verified on-chain by Claude. Ongoing: the relayer wallet needs top-ups when its balance runs low (operational, not a backlog blocker).
 - [ ] **CON-04.4** Sync ABIs: `node .claude/scripts/sync-abi.js indexer <Contract>` and `frontend <Contract>` for every changed contract.
-- [ ] **CON-04.5** Update `business-model.md` and root `about.md` to describe the v2 gas model (already drafted in `about.md`; reconcile the final details).
+- [x] **CON-04.5** Update `business-model.md` and root `about.md` to describe the v2 gas model (already drafted in `about.md`; reconcile the final details). Done 2026-11-01 by the main session (about.md 2.C/D/E, 3.B, repository table; business-model.md sections 1, 2, 5, 6, 7); tracker grep confirmed no current-tense Paymaster, 120-day deadlock or treasury-signed executeMilestone outside the v1 history text.
 - [ ] **CON-04.6** Smoke test on both testnets: launch → fund → close → gasless claim → gasless stake → gasless vote → gasless execute → recovery of overflow (force a tiny budget in a test project).
 
 - [x] **CON-02.22** Guardian cancel (user decision 2026-10-28): `MilestoneEscrow.cancelProject` callable by the developer or `registry.guardian()`; guards "Project already cancelled" and "Project is completed"; event unchanged. Verified 2026-10-28: code read, tests added, 195 passing.
 
-- [ ] **CON-04.7** Follow-up after the 120-day deadline removal (2026-10-28): (a) DONE 2026-10-28: admin/guardian cancel added (CON-02.22). (b) STILL OPEN: docs still mentioning the 120-day refund / deadlock, to reconcile: `about.md:130`, `business-model.md:14`, `scripts/testGuide.md`, `README`, `system-architecture-and-tech-stack.md`, and the indexer `DEADLOCKED` state (indexer work, for the WS-05 sync). Line numbers not re-checked by the tracker.
+- [ ] **CON-04.7** Follow-up after the 120-day deadline removal (2026-10-28): (a) DONE 2026-10-28: admin/guardian cancel added (CON-02.22). (b) PARTLY DONE 2026-11-01: `about.md` and `business-model.md` reconciled (CON-04.5). STILL OPEN: `scripts/testGuide.md` (see optional CON-04.0a), `README`, `system-architecture-and-tech-stack.md`, and the indexer `DEADLOCKED` state (indexer work, for the WS-05 sync).
 
 ## Phase 5: Before mainnet (not scheduled)
 
