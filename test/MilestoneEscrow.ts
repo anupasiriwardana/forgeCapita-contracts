@@ -15,6 +15,7 @@ import {
   networkHelpers,
   sendEth,
 } from "./helpers/protocol.js";
+import { cancelAndWaitRefundWindow } from "./helpers/extra.js";
 
 const { time } = networkHelpers;
 const eth = ethers.parseEther;
@@ -496,7 +497,7 @@ describe("MilestoneEscrow", function () {
       await time.increase(31 * DAY);
 
       await expect(escrow.connect(alice).refundFailedCrowdfund()).to.be.revertedWith(
-        "Funding goal was reached",
+        "Close window still open",
       );
     });
 
@@ -764,7 +765,9 @@ describe("MilestoneEscrow", function () {
     });
 
     it("cancels the project and emits the swept ETH and burned tokens", async function () {
-      const { escrow, treasury } = await networkHelpers.loadFixture(launchAndClaimProject);
+      const project = await networkHelpers.loadFixture(launchAndClaimProject);
+      const { escrow, treasury } = project;
+      await cancelAndWaitRefundWindow(project);
 
       await expect(escrow.connect(treasury).emergencyShutdown())
         .to.emit(escrow, "EmergencyShutdownTriggered")
@@ -773,7 +776,9 @@ describe("MilestoneEscrow", function () {
     });
 
     it("sweeps all escrow ETH to the treasury", async function () {
-      const { escrow, treasury } = await networkHelpers.loadFixture(launchAndClaimProject);
+      const project = await networkHelpers.loadFixture(launchAndClaimProject);
+      const { escrow, treasury } = project;
+      await cancelAndWaitRefundWindow(project);
 
       const delta = await etherDelta(treasury.address, () =>
         escrow.connect(treasury).emergencyShutdown(),
@@ -784,8 +789,9 @@ describe("MilestoneEscrow", function () {
     });
 
     it("invalidates the token and burns the unvested developer tokens", async function () {
-      const { escrow, token, treasury, alice, bob } =
-        await networkHelpers.loadFixture(launchAndClaimProject);
+      const project = await networkHelpers.loadFixture(launchAndClaimProject);
+      const { escrow, token, treasury, alice, bob } = project;
+      await cancelAndWaitRefundWindow(project);
       await escrow.connect(treasury).emergencyShutdown();
 
       expect(await token.isInvalidated()).to.equal(true);

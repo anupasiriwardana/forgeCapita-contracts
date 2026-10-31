@@ -5,6 +5,7 @@ import {
   launchAndClaimProject,
   networkHelpers,
 } from "./helpers/protocol.js";
+import { cancelAndWaitRefundWindow } from "./helpers/extra.js";
 
 const PERMIT_TYPES = {
   Permit: [
@@ -105,6 +106,7 @@ describe("ProjectToken permit", function () {
     const { token, escrow, treasury, alice, outsider } = project;
     const deadline = await futureDeadline();
     const sig = await signPermit(project, alice, outsider.address, 1n, deadline);
+    await cancelAndWaitRefundWindow(project);
     await escrow.connect(treasury).emergencyShutdown();
 
     await expect(
@@ -194,6 +196,7 @@ describe("DividendDistributor stakeWithPermit", function () {
     const amount = 10n * ONE_TOKEN;
     const deadline = await futureDeadline();
     const sig = await signPermit(project, alice, await distributor.getAddress(), amount, deadline);
+    await cancelAndWaitRefundWindow(project);
     await escrow.connect(treasury).emergencyShutdown();
 
     await expect(

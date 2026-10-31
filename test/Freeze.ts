@@ -11,6 +11,7 @@ import {
   launchProject,
   networkHelpers,
 } from "./helpers/protocol.js";
+import { cancelAndWaitRefundWindow } from "./helpers/extra.js";
 
 const FREEZE = 45n * BigInt(DAY);
 const MAX_TOTAL = 90n * BigInt(DAY);
@@ -381,8 +382,10 @@ describe("Freeze", function () {
     });
 
     it("lets the guardian shut down a frozen project", async function () {
-      const { escrow, treasury } = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
+      const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
+      const { escrow, treasury } = project;
       await escrow.connect(treasury).freezeMilestones();
+      await cancelAndWaitRefundWindow(project);
 
       await expect(escrow.connect(treasury).emergencyShutdown()).to.emit(
         escrow,

@@ -14,6 +14,14 @@ export type Project = Awaited<ReturnType<typeof launchProject>>;
 export type Signer = Project["alice"];
 
 export const eth = ethers.parseEther;
+export const REFUND_WINDOW_SECONDS = 90 * 24 * 60 * 60;
+
+/** Developer cancels, then the 90-day refund window passes, so the guardian may shut the project down. */
+export async function cancelAndWaitRefundWindow(project: Project): Promise<void> {
+  await project.escrow.connect(project.developer).cancelProject("stop");
+  await networkHelpers.time.increase(REFUND_WINDOW_SECONDS);
+}
+
 export const CLAIM = 0;
 export const STAKE = 1;
 export const VOTE = 2;

@@ -8,6 +8,7 @@ import {
   launchProject,
   networkHelpers,
 } from "./helpers/protocol.js";
+import { cancelAndWaitRefundWindow } from "./helpers/extra.js";
 
 type Project = Awaited<ReturnType<typeof launchProject>>;
 
@@ -112,8 +113,9 @@ describe("Registry integration", function () {
     });
 
     it("sweeps an emergency shutdown to the new treasury", async function () {
-      const { registry, treasury, escrow, carol, outsider } =
-        await networkHelpers.loadFixture(launchAndClaimProject);
+      const project = await networkHelpers.loadFixture(launchAndClaimProject);
+      const { registry, treasury, escrow, carol, outsider } = project;
+      await cancelAndWaitRefundWindow(project);
       await rotateTreasury(registry, treasury, outsider);
       await rotateGuardian(registry, treasury, carol);
 
@@ -126,8 +128,9 @@ describe("Registry integration", function () {
 
   describe("guardian rotation", function () {
     it("stops the old guardian and enables the new one to shut down", async function () {
-      const { registry, escrow, treasury, outsider } =
-        await networkHelpers.loadFixture(launchAndClaimProject);
+      const project = await networkHelpers.loadFixture(launchAndClaimProject);
+      const { registry, escrow, treasury, outsider } = project;
+      await cancelAndWaitRefundWindow(project);
       await rotateGuardian(registry, treasury, outsider);
 
       await expect(escrow.connect(treasury).emergencyShutdown()).to.be.revertedWith(

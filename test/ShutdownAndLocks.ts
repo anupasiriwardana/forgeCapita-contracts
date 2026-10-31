@@ -12,11 +12,12 @@ import {
   ethers,
   etherDelta,
   launchAndClaimProject,
+  launchAndCompleteProject,
   launchAndStartMilestoneProject,
   launchProject,
   networkHelpers,
 } from "./helpers/protocol.js";
-import { eth } from "./helpers/extra.js";
+import { cancelAndWaitRefundWindow, eth } from "./helpers/extra.js";
 
 const { time } = networkHelpers;
 const WINDOW = BigInt(90 * DAY);
@@ -144,7 +145,7 @@ describe("CON-02.28 emergency shutdown after a cancel", function () {
     }
 
     it("is set by the shutdown of a project that was not cancelled", async function () {
-      const { escrow, treasury } = await networkHelpers.loadFixture(launchAndClaimProject);
+      const { escrow, treasury } = await networkHelpers.loadFixture(launchAndCompleteProject);
       await escrow.connect(treasury).emergencyShutdown();
 
       expect(await escrow.cancelledAt()).to.equal(BigInt(await time.latest()));
@@ -225,8 +226,10 @@ describe("CON-02.28 emergency shutdown after a cancel", function () {
     );
   });
 
-  it("keeps the old behaviour for a project that is not cancelled", async function () {
-    const { escrow, token, treasury } = await networkHelpers.loadFixture(launchAndClaimProject);
+  it("sweeps and invalidates a cancelled project once the window has passed", async function () {
+    const project = await networkHelpers.loadFixture(launchAndClaimProject);
+    const { escrow, token, treasury } = project;
+    await cancelAndWaitRefundWindow(project);
     const escrowAddress = await escrow.getAddress();
     const balance = await ethers.provider.getBalance(escrowAddress);
 
@@ -255,7 +258,7 @@ describe("CON-02.28 emergency shutdown after a cancel", function () {
   });
 
   it("reverts a second shutdown with 'Already shut down' after both kinds", async function () {
-    const plain = await networkHelpers.loadFixture(launchAndClaimProject);
+    const plain = await networkHelpers.loadFixture(launchAndCompleteProject);
     await plain.escrow.connect(plain.treasury).emergencyShutdown();
     await expect(plain.escrow.connect(plain.treasury).emergencyShutdown()).to.be.revertedWith(
       "Already shut down",
@@ -270,7 +273,7 @@ describe("CON-02.28 emergency shutdown after a cancel", function () {
   });
 
   it("checks 'Already shut down' before 'Refunds still open'", async function () {
-    const { escrow, treasury } = await networkHelpers.loadFixture(launchAndClaimProject);
+    const { escrow, treasury } = await networkHelpers.loadFixture(launchAndCompleteProject);
     await escrow.connect(treasury).emergencyShutdown();
 
     // projectCancelled is now true and 90 days have not passed, yet the first check wins
@@ -341,9 +344,11 @@ describe("CON-02.29 ProjectToken.burn is owner only", function () {
   });
 
   it("still lets emergencyShutdown burn the escrow-held tokens", async function () {
-    const { token, escrow, treasury } = await networkHelpers.loadFixture(launchAndClaimProject);
+    const project = await networkHelpers.loadFixture(launchAndClaimProject);
+    const { token, escrow, treasury } = project;
     const escrowAddress = await escrow.getAddress();
     expect(await token.balanceOf(escrowAddress)).to.equal(DEVELOPER_SUPPLY);
+    await cancelAndWaitRefundWindow(project);
 
     await expect(escrow.connect(treasury).emergencyShutdown())
       .to.emit(escrow, "EmergencyShutdownTriggered")

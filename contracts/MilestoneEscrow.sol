@@ -55,6 +55,9 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
     /// @notice After a cancel the guardian may shut the project down only when every public token is
     /// refunded or this long has passed since the cancel.
     uint256 public constant REFUND_WINDOW = 90 days;
+    /// @notice After the funding deadline the developer has this long to close a funded campaign;
+    /// once it passes, investors may refund even though the goal was met.
+    uint256 public constant CLOSE_GRACE = 14 days;
 
     /// @dev Registry action kinds (Claim, Stake, Vote, Execute = 0..3).
     uint8 private constant ACTION_CLAIM = 0;
@@ -87,6 +90,10 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
     uint256 public freezeStart;
     uint256 public frozenUntil;
     uint256 public totalFrozen;
+
+    /// @notice Frozen time already accumulated when each milestone's vote started; the vote is extended
+    /// by the time frozen since.
+    mapping(uint256 => uint256) public frozenAtVoteStart;
 
     mapping(address => uint256) public deposits;
     mapping(address => bool) public hasClaimedTokens;
@@ -226,6 +233,10 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
         require(msg.sender == developer, "Only developer can call");
         require(isFundingActive, "Already closed");
         require(
+            block.timestamp <= fundingDeadline + CLOSE_GRACE,
+            "Close window ended"
+        );
+        require(
             address(this).balance >= fundingGoal,
             "Funding goal not reached"
         );
@@ -258,6 +269,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
 
         milestones[index].isVotingOpen = true;
         milestones[index].votingStartTime = block.timestamp;
+        frozenAtVoteStart[index] = _frozenNow();
         emit VotingStarted(index);
     }
 
@@ -326,7 +338,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
 
         Milestone storage milestone = milestones[currentMilestoneIndex];
         require(milestone.isVotingOpen, "Voting is not open");
-        require(block.timestamp < milestone.votingStartTime + VOTING_PERIOD, "Voting period ended");
+        require(block.timestamp < _votingEnd(currentMilestoneIndex), "Voting period ended");
         require(!hasVoted[currentMilestoneIndex][voter], "Already voted");
 
         uint256 voterWeight = dividendDistributor.stakedBalance(voter);
@@ -353,8 +365,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
         require(milestone.isVotingOpen, "Voting is not open");
 
         bool fastTrackPassed = milestone.yesVotes > (publicSupply / 2);
-        bool votingEnded = block.timestamp >=
-            milestone.votingStartTime + VOTING_PERIOD;
+        bool votingEnded = block.timestamp >= _votingEnd(index);
         bool quorumPassed = votingEnded &&
             ((milestone.yesVotes + milestone.noVotes) >=
                 (publicSupply * QUORUM_PERCENT) / 100) &&
@@ -411,6 +422,26 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
         }
 
         emit MilestoneExecuted(index, developerNetPayout, tokensVested, deduction);
+    }
+
+    /// @dev Cumulative frozen time up to now: settled time plus the elapsed part of the recorded freeze
+    /// (capped at its effective end, so a lapsed freeze counts exactly its length).
+    function _frozenNow() private view returns (uint256) {
+        if (freezeStart == 0) return totalFrozen;
+        uint256 end = block.timestamp < frozenUntil ? block.timestamp : frozenUntil;
+        return totalFrozen + (end - freezeStart);
+    }
+
+    function _votingEnd(uint256 index) private view returns (uint256) {
+        return milestones[index].votingStartTime + VOTING_PERIOD + (_frozenNow() - frozenAtVoteStart[index]);
+    }
+
+    /// @notice Current end of the voting period of an opened milestone: the 28 days plus any time the
+    /// project has been frozen since the vote started. Moves later while a freeze is running.
+    function votingEndTime(uint256 index) external view returns (uint256) {
+        require(index < milestones.length, "Invalid milestone index");
+        require(milestones[index].votingStartTime != 0, "Voting not started");
+        return _votingEnd(index);
     }
 
     /// @notice True while a freeze is active. Lapses by itself at frozenUntil.
@@ -518,8 +549,9 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
         require(isFundingActive, "Funding already closed successfully");
         require(block.timestamp > fundingDeadline, "Deadline not reached yet");
         require(
-            address(this).balance < fundingGoal,
-            "Funding goal was reached"
+            address(this).balance < fundingGoal ||
+                block.timestamp > fundingDeadline + CLOSE_GRACE,
+            "Close window still open"
         );
 
         uint256 invested = deposits[msg.sender];
@@ -605,6 +637,7 @@ contract MilestoneEscrow is Initializable, ReentrancyGuard, EIP712 {
                 "Refunds still open"
             );
         } else {
+            require(completed, "Cancel project first");
             projectCancelled = true;
             cancelledAt = block.timestamp;
         }

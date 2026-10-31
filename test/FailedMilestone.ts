@@ -230,8 +230,8 @@ describe("Failed milestone vote (CON-02.24, 02.25, 02.26 dropped)", function () 
     it("lets the failure path run while frozen", async function () {
       const project = await networkHelpers.loadFixture(launchAndStartMilestoneProject);
       const { escrow, treasury } = project;
+      await time.increase(VOTING_PERIOD + 86_400n);
       await escrow.connect(treasury).freezeMilestones();
-      await time.increase(VOTING_PERIOD);
       expect(await escrow.isFrozen()).to.equal(true);
 
       await expect(escrow.executeMilestone()).to.emit(escrow, "MilestoneFailed");

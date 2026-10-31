@@ -6,6 +6,7 @@ import {
   launchProject,
   networkHelpers,
 } from "./helpers/protocol.js";
+import { cancelAndWaitRefundWindow } from "./helpers/extra.js";
 
 describe("ProjectToken", function () {
   describe("metadata", function () {
@@ -65,8 +66,9 @@ describe("ProjectToken", function () {
     });
 
     it("blocks transfer, transferFrom and approve once the escrow invalidates the token", async function () {
-      const { token, escrow, treasury, alice, bob } =
-        await networkHelpers.loadFixture(launchAndClaimProject);
+      const project = await networkHelpers.loadFixture(launchAndClaimProject);
+      const { token, escrow, treasury, alice, bob } = project;
+      await cancelAndWaitRefundWindow(project);
 
       await expect(escrow.connect(treasury).emergencyShutdown()).to.emit(token, "TokenInvalidated");
 
