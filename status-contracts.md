@@ -2,10 +2,20 @@
 
 **Service:** `forgecapita-contracts` (Solidity / Hardhat 3, OpenZeppelin clones)
 **Networks:** Arbitrum Sepolia (`421614`) and BSC Testnet (`97`)
-**Last Updated:** 2026-10-30
+**Last Updated:** 2026-10-31
 **Location of this file:** moved here from the workspace root on 2026-10-28.
 
-**Current focus:** Step: WS-04.7d (third reviewer round: stuck funding, freeze vs voting, shutdown via cancel) | State: awaiting-review (WS-04.8 gated by the CON-03.7 reviewer re-check of the final code and the CON-03.10 decision) | Updated: 2026-10-31
+**Current focus:** Step: WS-04.7d (third reviewer round: stuck funding, freeze vs voting, shutdown via cancel) | State: WS-04.7c/7d done and reviewed; CON-03.10 CONFIRMED 2026-10-31; WS-04.8 ready (not started) | Updated: 2026-10-31
+
+## Decision 2026-10-31: CON-03.10 CONFIRMED by the user; WS-04.8 unblocked
+Margin 50%. BSC Testnet (97): maxCostPerAction 3.5e14 wei (default; Guardian may raise to 1e15 if gas nears 3 gwei), all four l1Surcharge 0. Arbitrum Sepolia (421614): maxCostPerAction 2e14 wei; l1Surcharge about 6.04e13 (Claim), 6.01e13 (Stake), 6.02e13 (Vote), 6.03e13 (Execute). Guardian-only registry settings (setMaxCostPerAction / setL1Surcharge, 1 ETH cap), changeable any time without redeploy; they are set by the user/Guardian after deployment as a [USER-ACTION] (CON-04.3a). WS-04.8 starts with CON-04.0, then the deploy USER-ACTIONs. Not started.
+
+## Status 2026-10-31 (earlier, superseded by the decision above): reviewer re-check passed
+Reported by the user: the second reviewer re-checked the final contracts code (including WS-04.7d) and found everything fine; the user reviewed and committed WS-04.7d. CON-03.7 ticked (not independently verifiable by the tracker). WS-04.7c and WS-04.7d are done and reviewed. WS-04.8 is NOT started; it waits only for CON-03.10, which the user has NOT confirmed.
+Values below were SUGGESTED and are now CONFIRMED (see decision above):
+- Safety margin: 50%.
+- BSC Testnet: `maxCostPerAction` 3.5e14 wei (1e15 if about 3 gwei is expected); all surcharges 0.
+- Arbitrum Sepolia: `maxCostPerAction` 2e14 wei; `l1Surcharge` about 6.04e13 (Claim), 6.01e13 (Stake), 6.02e13 (Vote), 6.03e13 (Execute).
 
 ## Status 2026-10-31: WS-04.7d implemented
 Tracker-verified: compile (nothing to recompile), `npx hardhat test` **415 passing, 0 failing** (baseline 373); `git diff --stat` shows only `contracts/MilestoneEscrow.sol` changed (+38/-5); MilestoneEscrow deployed size **16997** bytes (limit 24576) read from the artifact. Ticked: CON-02.31, 02.32, 02.33, CON-03.22, 03.23, 03.24. Not re-read by the tracker: the individual new test bodies (14 + 14 + 11 tests ran green; the listing for StuckFunding was seen).
@@ -70,7 +80,7 @@ Full text: `docs/v2-design.md` section 16 items 3-5. (A) Finding 6, permissionle
 PENDING (blocked by scope, frontend is outside the current step), drafts for `forgecapita-frontend/backlog-frontend.md`:
 > (1) Token claim: before `claimTokens()` / any claim flow, read `hasClaimedTokens(account)`; if already true, or the call reverts with "Tokens already claimed" (a stranger or the relayer called `claimTokensFor` first), treat it as success and refresh the UI. (2) Self-pay staking path: approve the EXACT stake amount to the distributor, never unlimited (a standing allowance is what a junk-signature `stakeWithPermit` could use; after CON-02.30 only the owner or a relayer can, but exact approvals remain the safe default). Prefer the permit flow over a plain approve.
 
-## BLOCKED - WS-04.8 (until a second reviewer and one decision are handled)
+## (Resolved 2026-10-31, no longer blocked) formerly BLOCKED - WS-04.8; kept for history
 Why: Slither is done and triaged (CON-03.6 and CON-03.6a ticked). Still open: an independent review and the on-chain cost settings.
 You need to do:
 1. CON-03.7: get a second reviewer for signature handling and roles; hand them the notes in backlog CON-03.7 (new `nonReentrant` stake paths; P2P accepts any token).
@@ -266,12 +276,15 @@ Verified by running `npm test` (`hardhat test`): **144 passing, 2 failing** (146
    [x] CON-03.1, 03.2, 03.4, 03.5, 03.9 (WS-04.7, awaiting review); CON-03.6 size gate and gas report done.
    [x] CON-03.12 re-derive suggested values and minimum goals (WS-04.7b, awaiting review); CON-03.14 optional new item.
    [x] CON-03.6, CON-03.6a Slither run and triaged; 2 hardening fixes (WS-04.7 follow-up, awaiting review).
-   [ ] CON-03.7 second reviewer; CON-03.10 decision (margin + on-chain cost settings). Optional: CON-03.15 zero-address checks, CON-03.16 P2P any-token. CON-02.23 resolved 2026-10-28; CON-03.12 done; CON-03.13 open.
+   [x] CON-03.7 second reviewer (passed 2026-10-31, user-reported).
+   [x] CON-03.10 decision CONFIRMED 2026-10-31 (values set by Guardian after deploy, CON-04.3a). Optional: CON-03.15 zero-address checks, CON-03.16 P2P any-token. CON-02.23 resolved 2026-10-28; CON-03.12 done; CON-03.13 open.
 6. [ ] `[USER-ACTION]` CON-04 deploy to both testnets, fund and allow-list the relayer.
 
 ---
 
 ## Change log
+2026-10-31  CON-03.10  Ticked; user confirmed margin 50% and per-chain registry values; WS-04.8 unblocked; new USER-ACTION CON-04.3a (set values after deploy)  - verified by: user statement; docs edit only, no code touched
+2026-10-31  docs  CON-03.7 ticked (second reviewer re-check of final code incl. WS-04.7d passed; user committed WS-04.7d); WS-04.7c/7d marked done and reviewed; CON-03.10 suggestions recorded as SUGGESTED only; WS-04.8 blocked only on CON-03.10  - verified by: user report, not verified by tracker; docs edit only, no code touched
 2026-10-31  docs  Recorded user decision: shutdown of a COMPLETED project keeps setting `projectCancelled` and `cancelledAt`; open question closed; WS-05 note added to ROADMAP  - verified by: docs edit only, no code touched
 2026-10-31  WS-04.7d  `MilestoneEscrow`: CLOSE_GRACE close window and refund after grace, freeze extends voting (`frozenAtVoteStart`, `votingEndTime`), shutdown requires cancel; CON-02.31-33 and CON-03.22-24 ticked; 415 passing, size 16997  - verified by: compile, `npx hardhat test`, artifact size, `git diff --stat`, grep of the code
 2026-10-30  WS-04.7c  Contracts: failure branch in `executeMilestone` (`MilestoneFailed`, cancel without revert, no gas booked, freeze only on payout path), `vote`/`voteBySig` end check ("Voting period ended", exclusive boundary), `cancelledAt` and `REFUND_WINDOW` (90 days), `emergencyShutdown` after a cancel ("Already shut down", "Refunds still open"), `ProjectToken.burn` onlyOwner, `_disableInitializers()` in the four master constructors, `stakeWithPermit` "Permit failed" guard. Tests: new FailedMilestone, ShutdownAndLocks, PermitStrangers; five existing files edited; helper returns masters. CON-02.24, 02.25, 02.27, 02.28, 02.29, 02.30 and CON-03.17 to CON-03.21 ticked; CON-03.7 updated (stays open); sizes MilestoneEscrow 16444, DividendDistributor 4281, ProjectToken 6927  - verified by: tracker re-ran compile (nothing to recompile) and `npm test` (373 passing, 0 failing, 23 s mocha), re-measured sizes from artifacts, read the full `git diff -- contracts/` and `git diff -- test/` of the edited tests (tracked), spot-read FailedMilestone.ts (lines 52-187, 258-287) and the locked-masters tests; gas percentages are dev figures (GasMeasurement assertion passes), the rest of the new test bodies were not read line by line
