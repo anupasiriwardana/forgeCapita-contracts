@@ -2,20 +2,26 @@
 
 **Service:** `forgecapita-contracts` (Solidity / Hardhat 3, OpenZeppelin clones)
 **Networks:** Arbitrum Sepolia (`421614`) and BSC Testnet (`97`)
-**Last Updated:** 2026-10-31
+**Last Updated:** 2026-11-01
 **Location of this file:** moved here from the workspace root on 2026-10-28.
 
-**Current focus:** Step: WS-04.8 part 1 (CON-04.0 done) | State: blocked (waiting for user actions) | Updated: 2026-10-31
+**Current focus:** Step: WS-04.8 (user actions done per user report; next CON-04.4 ABI sync, then CON-04.5, CON-04.6) | State: idle (not started; next /next-task WS-04.8 picks CON-04.4) | Updated: 2026-11-01
 
-## BLOCKED - WS-04.8
-Why: the remaining items are deployment and key handling; Claude never deploys.
+## Status 2026-11-01: WS-04.8 user actions done (USER-REPORTED)
+The user reported (Claude did not verify on-chain): contracts verified on Arbiscan and BscScan (CON-04.2); `scripts/postDeployConfig.ts` run as Guardian on both chains (CON-04.3a) and all registry reads checked on both explorers (guardian, treasury, maxCostPerAction, l1Surcharge, isRelayer), all matched; relayer wallet created, funded and allow-listed (CON-04.3). Relayer public address `0x8a1Be9d8fd97658b6b0B8b537374FF6c3E41815b`; setRelayer tx Arbitrum Sepolia `0x73a1615d7d0dd992e9e23b0311d6adca8c1c23a367edfee1db38b5b7ec06759d`, BSC Testnet `0x1825ef8dbe33d7c559453b492820f0892e5ba7be0149e656f801394ca71d2f72`. `docs/deployments-v2.md` was updated by the main session. The BLOCKED section below is RESOLVED and kept for history.
+Remaining in WS-04.8: CON-04.4 (sync ABIs to indexer and frontend), CON-04.5 (docs reconciliation), CON-04.6 (smoke test on both testnets; a USER-ACTION-heavy item). Operational note: the relayer wallet needs top-ups on both chains when its balance runs low.
+
+## Status 2026-10-31: v2 deployed (USER-REPORTED)
+The user reported running `scripts/deploy.ts` themselves on Arbitrum Sepolia (421614) and BSC Testnet (97) and pasted the outputs in chat. Claude did not deploy and cannot confirm on-chain; treat everything below as user-reported. CON-02.20 (deployer key in the Hardhat keystore as `DEPLOYER_KEY`, config uses `configVariable`) is also user-reported done. `docs/deployments-v2.md` was created by the main session with all addresses. Same addresses on both chains: registry `0x2e6A22fd249930b9F2905D1bD66443CbE366AacB`, factory `0x246Ffa3Bf583a15e92e17FAa32d3663C17204d52`, P2P `0xd2540297eB8FC0985b5fa26cba2358db0a0AE914`, plus the masters (see the file). Start blocks: Arbitrum Sepolia 324727776, BSC Testnet 140034644. These addresses and start blocks are needed by WS-05 (indexer start blocks and addresses, IDX-21; frontend addresses, FE-12/FE-13); WS-05.1 is a user action that still waits for WS-04.8 to finish. Risk: `hardhat.config.ts` `verify.etherscan` uses a single `ARBISCAN_API_KEY` and possibly old explorer API URLs; BscScan verification may need a separate key or the Etherscan V2 style config. If verification fails, the config needs a change (not a tracker task).
+
+## (RESOLVED 2026-11-01, user-reported; kept for history) formerly BLOCKED - WS-04.8
+Why: the remaining items need the user's keys and wallets; Claude never deploys or signs.
 You need to do:
-1. CON-02.20: move the deployer key to the Hardhat keystore (`npx hardhat keystore set <NAME>`, referenced via `configVariable`); never paste the key in chat.
-2. CON-04.1: fund the deployer on Arbitrum Sepolia and BSC Testnet and run the deployment yourself (Claude never deploys).
-3. CON-04.2: verify on Arbiscan/BscScan; record factory, registry, P2P and implementation addresses plus start blocks in `forgecapita-contracts/docs/deployments-v2.md`.
-4. CON-04.3a: as Guardian on each chain, set `maxCostPerAction` and `l1Surcharge` (edit and run `scripts/postDeployConfig.ts`; set REGISTRY_ADDRESS and RELAYER_ADDRESS first).
-5. CON-04.3: generate and fund the relayer address on both chains and allow-list it with `setRelayer` (Guardian).
-How to confirm (no secrets in chat): share addresses, tx hashes and registry read values (`maxCostPerAction`, `isRelayer`).
+1. CON-04.2 (verification part): verify the contracts on Arbiscan (Sepolia) and BscScan (testnet): registry, 4 masters, factory, P2P. If it fails because of the API key or URL config, tell the main session so `hardhat.config.ts` can be adjusted. Deployment itself and `docs/deployments-v2.md` are done.
+2. CON-04.3 (first, to obtain the address): create a new relayer wallet (separate from the deployer and treasury), fund it on both chains. Never paste its private key in chat; only the public address.
+3. CON-04.3a: as Guardian, on EACH chain, run `scripts/postDeployConfig.ts` with REGISTRY_ADDRESS `0x2e6A22fd249930b9F2905D1bD66443CbE366AacB` and RELAYER_ADDRESS set to the relayer public address, using the confirmed values (BSC: maxCostPerAction 3.5e14, surcharges 0; Arbitrum Sepolia: 2e14, about 6.04e13/6.01e13/6.02e13/6.03e13 for Claim/Stake/Vote/Execute).
+4. CON-04.3 (allow-list): as Guardian, `setRelayer` for the relayer address on each chain (the script may do this; otherwise use an explorer write).
+How to confirm (no secrets in chat): share explorer verification links or confirmations, tx hashes, and registry read values (`maxCostPerAction`, `l1Surcharge`, `isRelayer(relayer)`) per chain.
 Then run: /next-task WS-04.8
 
 ## Decision 2026-10-31: CON-03.10 CONFIRMED by the user; WS-04.8 unblocked
@@ -294,6 +300,8 @@ Verified by running `npm test` (`hardhat test`): **144 passing, 2 failing** (146
 ---
 
 ## Change log
+2026-11-01  CON-04.2, CON-04.3a, CON-04.3  Ticked as USER-REPORTED: explorer verification on Arbiscan and BscScan; postDeployConfig.ts run as Guardian on both chains with registry reads matching; relayer 0x8a1Be9d8fd97658b6b0B8b537374FF6c3E41815b created, funded, allow-listed (setRelayer txs recorded in backlog); BLOCKED section resolved; next CON-04.4  - verified by: user statement only, not verified on-chain; docs edit only, no source touched
+2026-10-31  CON-02.20, CON-04.1  Ticked as USER-REPORTED: user ran scripts/deploy.ts on Arbitrum Sepolia (start block 324727776) and BSC Testnet (140034644); registry/factory/P2P addresses recorded in docs/deployments-v2.md; CON-04.2 (explorer verification), CON-04.3a, CON-04.3 stay BLOCKED; verify-config risk noted  - verified by: user statement only, not verified on-chain; docs edit only, no source touched
 2026-10-31  CON-04.0  Deployment modules/scripts updated for the registry (registry -> 4 masters -> factory; `deploy.ts`, scenarios, new `postDeployConfig.ts`); CON-04.0 ticked, optional CON-04.0a added for stale demo scenarios/testGuide; remaining WS-04.8 items BLOCKED on user  - verified by: read ForgeCapitaFactory.ts, postDeployConfig.ts and grep of deploy.ts; `npx hardhat test` 415 passing; Ignition/scripts not executed, scenario1-13 edits and tsc errors not individually verified
 2026-10-31  CON-03.10  Ticked; user confirmed margin 50% and per-chain registry values; WS-04.8 unblocked; new USER-ACTION CON-04.3a (set values after deploy)  - verified by: user statement; docs edit only, no code touched
 2026-10-31  docs  CON-03.7 ticked (second reviewer re-check of final code incl. WS-04.7d passed; user committed WS-04.7d); WS-04.7c/7d marked done and reviewed; CON-03.10 suggestions recorded as SUGGESTED only; WS-04.8 blocked only on CON-03.10  - verified by: user report, not verified by tracker; docs edit only, no code touched

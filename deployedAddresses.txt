@@ -33,26 +33,41 @@ Account balance: 0.1 ETH
 ----------NEW-------------
 arbitrum sepolia : 
 Deploying contracts with the account: 0x08D3B18508ca976fECc7291c06c30ae15133eB4F
-Account balance: 0.999880773796955023 ETH
-1. Deploying Master Implementation Contracts...
-  Master Token deployed to:       0xBc8D1f7402dBb78acF48558BC98Df3dDDf18CBe4
-  Master Escrow deployed to:      0x0168A490028346C85B8BEe16c78c6C95254670cB
-  Master Distributor deployed to: 0xEa718575cEC91cdD5d4cE30b7826BE04C532cCbc
-  Master Router deployed to:      0xee5a74BAA9b3c01e647B451f4940223929DbD49c
+Account balance: 0.999758283923116885 ETH
+1. Deploying ForgeCapitaRegistry...
+  Admin (initial treasury AND Guardian) = deployer: 0x08D3B18508ca976fECc7291c06c30ae15133eB4F
+  ForgeCapitaRegistry deployed to: 0x2e6A22fd249930b9F2905D1bD66443CbE366AacB
 
-2. Deploying ForgeCapitaFactory (Proxy Router)...
-  ForgeCapitaFactory deployed to: 0x9b55Cb74b55bc835fC0E57Ab735637C64Ff21990
-  P2PExchange automatically deployed to: 0x0204969751A99898A441f6b04869DB3864F49824 
+2. Deploying Master Implementation Contracts...
+  Master Token deployed to:       0x09A7681d88480e9A9A77DF73487d4DCF2647C1F9
+  Master Escrow deployed to:      0x68D18916A192ad520a60099Ba07d450aF0c48AD3
+  Master Distributor deployed to: 0x68AAc848852c127137EEd01Db7950FbFc4d3526b
+  Master Router deployed to:      0x646860b7F7d31F6e2779c35576724EDdB47bCdD9
+
+3. Deploying ForgeCapitaFactory (Proxy Router)...
+  ForgeCapitaFactory deployed to: 0x246Ffa3Bf583a15e92e17FAa32d3663C17204d52
+  P2PExchange automatically deployed to: 0xd2540297eB8FC0985b5fa26cba2358db0a0AE914
+
+Next: the Guardian (deployer) must run scripts/postDeployConfig.ts to set the relayer and gas caps.env
+
+
 
 bsc Testnet :
 Deploying contracts with the account: 0x08D3B18508ca976fECc7291c06c30ae15133eB4F
-Account balance: 0.0993899023 ETH
-1. Deploying Master Implementation Contracts...
-  Master Token deployed to:       0xBc8D1f7402dBb78acF48558BC98Df3dDDf18CBe4
-  Master Escrow deployed to:      0x0168A490028346C85B8BEe16c78c6C95254670cB
-  Master Distributor deployed to: 0xEa718575cEC91cdD5d4cE30b7826BE04C532cCbc
-  Master Router deployed to:      0xee5a74BAA9b3c01e647B451f4940223929DbD49c
+Account balance: 0.2987790885 ETH
+Account balance: 0.2987790885 ETH
+1. Deploying ForgeCapitaRegistry...
+  Admin (initial treasury AND Guardian) = deployer: 0x08D3B18508ca976fECc7291c06c30ae15133eB4F
+  ForgeCapitaRegistry deployed to: 0x2e6A22fd249930b9F2905D1bD66443CbE366AacB
 
-2. Deploying ForgeCapitaFactory (Proxy Router)...
-  ForgeCapitaFactory deployed to: 0x9b55Cb74b55bc835fC0E57Ab735637C64Ff21990
-  P2PExchange automatically deployed to: 0x0204969751A99898A441f6b04869DB3864F49824
+2. Deploying Master Implementation Contracts...
+  Master Token deployed to:       0x09A7681d88480e9A9A77DF73487d4DCF2647C1F9
+  Master Escrow deployed to:      0x68D18916A192ad520a60099Ba07d450aF0c48AD3
+  Master Distributor deployed to: 0x68AAc848852c127137EEd01Db7950FbFc4d3526b
+  Master Router deployed to:      0x646860b7F7d31F6e2779c35576724EDdB47bCdD9
+
+3. Deploying ForgeCapitaFactory (Proxy Router)...
+  ForgeCapitaFactory deployed to: 0x246Ffa3Bf583a15e92e17FAa32d3663C17204d52
+  P2PExchange automatically deployed to: 0xd2540297eB8FC0985b5fa26cba2358db0a0AE914
+
+Next: the Guardian (deployer) must run scripts/postDeployConfig.ts to set the relayer and gas caps.

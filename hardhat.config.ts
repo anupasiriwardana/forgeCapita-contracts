@@ -1,5 +1,5 @@
 import hardhatToolboxMochaEthersPlugin from "@nomicfoundation/hardhat-toolbox-mocha-ethers";
-import { defineConfig } from "hardhat/config";
+import { defineConfig, configVariable } from "hardhat/config";
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -37,13 +37,13 @@ export default defineConfig({
     arbitrumSepolia: {
       type: "http",
       url: process.env.ARBITRUM_SEPOLIA_RPC || "",
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      accounts: [configVariable("DEPLOYER_KEY")],
       chainId: 421614,
     },
     bscTestnet: {
       type: "http",
       url: process.env.BSC_TESTNET_RPC || "https://data-seed-prebsc-1-s1.binance.org:8545",
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      accounts: [configVariable("DEPLOYER_KEY")],
       chainId: 97,
     },
   },

@@ -9,8 +9,8 @@
 // Idempotent: re-running just rewrites the same values.
 import { network } from "hardhat";
 
-const REGISTRY_ADDRESS = "0x0000000000000000000000000000000000000000"; // TODO: ForgeCapitaRegistry address
-const RELAYER_ADDRESS = "0x0000000000000000000000000000000000000000"; // TODO: relayer hot wallet address
+const REGISTRY_ADDRESS = "0x2e6A22fd249930b9F2905D1bD66443CbE366AacB";
+const RELAYER_ADDRESS = "0x8a1Be9d8fd97658b6b0B8b537374FF6c3E41815b";
 
 // Action indices in the registry: 0 Claim, 1 Stake, 2 Vote, 3 Execute.
 const ACTION_LABELS = ["Claim", "Stake", "Vote", "Execute"] as const;
