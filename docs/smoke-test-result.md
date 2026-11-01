@@ -31,6 +31,18 @@ In [`scripts/smoke/lib.ts`](file:///d:/GitHub/forgeCapita/forgecapita-contracts/
 ```
 This enables fresh developer wallets with 0 prior deployments to return an empty array and proceed directly to launching new projects.
 
+### Issue 2: BSC Testnet Gas Tip Floor Enforcement
+During Phase 6 (`06-vote-execute.ts`) on BSC Testnet, `m1.start` succeeded, but `m1.voteB` (relayed `voteBySig`) failed with:
+```
+ERROR: transaction gas price below minimum: gas tip cap 50424438, minimum needed 100000000
+```
+#### Root Cause
+BSC testnet RPC node's `eth_maxPriorityFeePerGas` returned `50424438` wei (~0.05 Gwei), but BSC validator nodes enforce a minimum gas tip cap (`maxPriorityFeePerGas`) of `100000000` wei (0.1 Gwei).
+
+#### Fix Applied
+In [`scripts/smoke/lib.ts`](file:///d:/GitHub/forgeCapita/forgecapita-contracts/scripts/smoke/lib.ts#L182-L197), `ethers.provider.getFeeData` was wrapped for chain ID `97` to clamp `maxPriorityFeePerGas` to at least `100_000_000n` (0.1 Gwei), preventing RPC gas price rejection.
+
+
 ---
 
 ## 2. Arbitrum Sepolia (Chain ID: `421614`)
@@ -160,7 +172,130 @@ This enables fresh developer wallets with 0 prior deployments to return an empty
 ## 3. BSC Testnet (Chain ID: `97`)
 
 - **Explorer**: [https://testnet.bscscan.com](https://testnet.bscscan.com)
-- **Status**: *Pending execution*
+- **Execution Date**: 2026-11-01
 
-*(To be filled during BSC Testnet run)*
+### Test Wallets & Roles
+
+| Role | Signer Index | Public Address |
+| :--- | :---: | :--- |
+| **Guardian / Treasury / Deployer** | 0 | `0x08D3B18508ca976fECc7291c06c30ae15133eB4F` |
+| **Developer** | 1 | `0xDB9C736d60e1773037d6c2232C73FC9f39d3d467` |
+| **Investor A** | 2 | `0x968Ee2C766252a096e6b50eCA69b7d658d5E66DE` |
+| **Investor B** | 3 | `0xB3feCEEDB8BEe98F5ee16189A670F1dd23E753D5` |
+| **Buyer** | 4 | `0x6CA6098Fc69A9d44Cfa79ad6BBa033F5B61a1219` |
+| **Relayer** | 5 | `0x8a1Be9d8fd97658b6b0B8b537374FF6c3E41815b` |
+
+### Overall Status Summary
+
+| Phase | Script | Target | Status | Notes |
+| :---: | :--- | :---: | :---: | :--- |
+| **00** | `00-check.ts` | All | ✅ **PASSED** | Roles, contracts, allowlists verified. |
+| **01** | `01-launch.ts` | P1, P2, P3 | ✅ **PASSED** | 3 projects cloned and initialized via `ForgeCapitaFactory`. |
+| **02** | `02-fund.ts` | P1, P2, P3 | ✅ **PASSED** | Deposits received, funding goals met, platform fees transferred. |
+| **03** | `03-claim-stake.ts` | P1, P2 | ✅ **PASSED** | Direct claims, relayer claims, and ERC-2612 gasless permit staking. |
+| **04** | `04-p2p.ts` | P1 | ✅ **PASSED** | Secondary listings, trade execution (1% fee), and cancellation. |
+| **05** | `05-revenue.ts` | P1, P2 | ✅ **PASSED** | Product sales split (1% fee, 24% dev, 75% stakers) and 0-staker fallback. |
+| **06** | `06-vote-execute.ts` | P1 | ✅ **PASSED** | EIP-712 `voteBySig`, guardian freeze/unfreeze, completion & vesting. |
+| **07** | `07-cancel-refund.ts` | P2 | ✅ **PASSED** | Dev role handover, cancellation, dead refund, and emergency shutdown. |
+| **08** | `08-failed-crowdfund.ts` | P3 | ⏳ *Pending* | (Requires 24h wait after Phase 01: ~2026-11-02 22:45 UTC+5:30) |
+| **09** | `09-gasdebt.ts` | P4 | ✅ **PASSED** | Relayer-sponsored actions executed; booked gas within budget (no debt). |
+
+---
+
+### Deployed Project Contracts (BSC Testnet)
+
+| Project | Key Purpose | Token Address | MilestoneEscrow | DividendDistributor | RevenueRouter |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **P1** | Happy Path Lifecycle | [`0x231Ac...099C`](https://testnet.bscscan.com/address/0x231Ac434a472869a949e87f60AcF73b174cD099C) | [`0xd2eeC...6346`](https://testnet.bscscan.com/address/0xd2eeC04FEBbA72507Db202dff5a269f26fc56346) | [`0xc2975...23Ad`](https://testnet.bscscan.com/address/0xc29753BfE842BAC649D9e5c997397F6b51d623Ad) | [`0x8d18D...0766`](https://testnet.bscscan.com/address/0x8d18DD4d36b7f25e9A53ae7F5020C4FbF6F80766) |
+| **P2** | Failure & Shutdown | [`0xb5B4d...0a1e`](https://testnet.bscscan.com/address/0xb5B4d00944fd9A8c78B9f30a69574fC04A900a1e) | [`0xBF75e...7744`](https://testnet.bscscan.com/address/0xBF75ecAAee69C542FE1109bF4E5e25F2EAd87744) | [`0x6aEb5...A192`](https://testnet.bscscan.com/address/0x6aEb57acEb2284419F49188022383781d00fA192) | [`0xedD8c...76DB`](https://testnet.bscscan.com/address/0xedD8c3Ea9cc1f3e58D14d7B5AbEd3CEe509076DB) |
+| **P3** | Failed Crowdfund | [`0x1B9bB...1DC2`](https://testnet.bscscan.com/address/0x1B9bBf0676769319032EE915D80ECedf1f5A1DC2) | [`0xB3249...d63F`](https://testnet.bscscan.com/address/0xB324900b7C3dE4B3bA98e37a60B6554f864Dd63F) | [`0x396d2...0276`](https://testnet.bscscan.com/address/0x396d25707B873546B695d394e8F3A05B96ac0276) | [`0xe9c61...dbcD`](https://testnet.bscscan.com/address/0xe9c6113879512978E357e08d5365a4957F3EdbcD) |
+| **P4** | Gas Debt Recovery | [`0xE2b7d...8A0d`](https://testnet.bscscan.com/address/0xE2b7d1dc959937C7c5524A01be07906eB3518A0d) | [`0x5745A...c815`](https://testnet.bscscan.com/address/0x5745A30aFd6ebac1D68258eA5477C7E36486c815) | [`0x6EA0F...f8aF`](https://testnet.bscscan.com/address/0x6EA0F97718CbaE28d5eC5988Dab22D1DE057f8aF) | [`0x2F5A4...8140`](https://testnet.bscscan.com/address/0x2F5A4e77Ac2892C2dc9e587bF577AC35027a8140) |
+
+---
+
+### Execution Steps & Transaction Records (BSC Testnet)
+
+#### Phase 1: Launch (`01-launch.ts`)
+- **P1 Launch**: [Tx `0xd86ef...542a`](https://testnet.bscscan.com/tx/0xd86ef26580bc305e8f13fe8276cce7c9d9d12fd9a6f2f5bc66c5081896dd542a) (Block `140234526`)
+- **P2 Launch**: [Tx `0x8615b...2705`](https://testnet.bscscan.com/tx/0x8615b8517812aefe18c7c6f6ea50e5d7f44d51b6c8f1958e8bb48e3691902705) (Block `140234532`)
+- **P3 Launch**: [Tx `0x1b814...7d00`](https://testnet.bscscan.com/tx/0x1b814a901c6197e4cf0dc288fd9627f7d240b0943239f1c0a402e28e45107d00) (Block `140234544`)
+
+#### Phase 2: Funding & Close (`02-fund.ts`)
+- **P1 Investor A Deposit (0.03 tBNB)**: [Tx `0x6f27e...dcab`](https://testnet.bscscan.com/tx/0x6f27ec11bb15e4b8f644496e78c556207e56b838dc5ef1754aaaf9f6f127dcab) (Block `140234953`)
+- **P1 Investor B Deposit (0.02 tBNB)**: [Tx `0x8dc9d...f0ed`](https://testnet.bscscan.com/tx/0x8dc9df571313ae113ceb240b7f0da4f0f3c200e630efdc3fbd4ca770e198f0ed) (Block `140234958`)
+- **P1 Close Funding (Developer)**: [Tx `0xfe769...1609`](https://testnet.bscscan.com/tx/0xfe7697ff0de36b5dcda6f01f31e3c4eb57a3b029cdc9117870d1d60d17181609) (Block `140234963`)
+- **P2 Investor B Deposit (0.004 tBNB)**: [Tx `0x58c8f...94f5`](https://testnet.bscscan.com/tx/0x58c8fe9477ca40f2cff3356cecf0b4523654aec4849e59961dc2f303882b94f5) (Block `140234976`)
+- **P2 Close Funding (Developer)**: [Tx `0xeeb5b...3b59`](https://testnet.bscscan.com/tx/0xeeb5b6cf5b171ec0ee13dbacc289017b252703f08f54df65171568380c053b59) (Block `140234980`)
+- **P3 Investor B Deposit (0.002 tBNB)**: [Tx `0x834ae...4a04`](https://testnet.bscscan.com/tx/0x834ae3b189747dbdc4259a4eeb84e99b5eda2a551a4f1f0bdec4e2c055f34a04) (Block `140234984`)
+
+#### Phase 3: Claim & Stake (`03-claim-stake.ts`)
+- **P1 Claim Tokens (Investor A, direct)**: [Tx `0x977fb...bdb7`](https://testnet.bscscan.com/tx/0x977fb42582ce02e18ad28a1edeba92d299159e4e28d86937906cb886df34bdb7) (Block `140235382`)
+- **P1 Claim Tokens (Investor B, sponsored relayer)**: [Tx `0x4e71d...e8cb`](https://testnet.bscscan.com/tx/0x4e71db1a0b36670c778a34f81559fb2b6836165f5c11e09da740c44724d0e8cb) (Block `140235387`)
+- **P1 Gasless Stake With Permit (Investor A, sponsored)**: [Tx `0x25f34...1b5b`](https://testnet.bscscan.com/tx/0x25f34aeb76d8f7faba93f0808557b95406889248483abf20c93fd6acf7f61b5b) (Block `140235395`)
+- **P1 Approve Distributor (Investor B)**: [Tx `0xcdace...9fcb`](https://testnet.bscscan.com/tx/0xcdace8949148da796d6d68893dfa783ae65c16054b4b386441b4a3e513b09fcb) (Block `140235408`)
+- **P1 Stake Direct (Investor B)**: [Tx `0xf992e...f8e0`](https://testnet.bscscan.com/tx/0xf992e2cf53eeaa832e66c1f80b821e4eaaa21085bae396f042a1a8a17ab8f8e0) (Block `140235415`)
+- **P2 Claim Tokens (Investor B)**: [Tx `0x26312...8820`](https://testnet.bscscan.com/tx/0x26312be9b8dbb617276270fddd55ca7d8039397ef443ea1e49bcdf8f29a98820) (Block `140235419`)
+
+#### Phase 4: P2P Trading (`04-p2p.ts`)
+- **Approve P2PExchange (Investor B)**: [Tx `0xe9415...45ae`](https://testnet.bscscan.com/tx/0xe9415debb56d5fa65647da298c97407813e57352332225783bf67826b76845ae) (Block `140235768`)
+- **Create Listing 0 (10,000 tokens for 0.005 tBNB)**: [Tx `0xff499...df60`](https://testnet.bscscan.com/tx/0xff499f58d5c6f6c6e86ce6e0c532f098036e82643056072953db5be1d3f4df60) (Block `140235773`)
+- **Create Listing 1 (5,000 tokens for 0.004 tBNB)**: [Tx `0xa74ba...78c5`](https://testnet.bscscan.com/tx/0xa74bae677477e96e3b551ef573de4b8a60d7a5d430dabd129cc252f5417378c5) (Block `140235778`)
+- **Fill Listing 0 (Buyer)**: [Tx `0x12953...6961`](https://testnet.bscscan.com/tx/0x12953bc2042b3535766efa6ea8ef40ebecd9cf39e17e92b070c60eb9af896961) (Block `140235782`)
+- **Cancel Listing 1 (Investor B)**: [Tx `0x923c0...82a5`](https://testnet.bscscan.com/tx/0x923c0b2641967d7977156bffd6cf73580e005b7bb2ebfc63b63aab47760f82a5) (Block `140235787`)
+
+#### Phase 5: Revenue Routing & Dividends (`05-revenue.ts`)
+- **P1 Pay Product (Buyer, 0.01 tBNB)**: [Tx `0xf4172...f014`](https://testnet.bscscan.com/tx/0xf4172ee233f35be07464415b704d0864fe6b0877f2c4106b9119815f0526f014) (Block `140236014`)
+- **P1 Claim Yield (Investor A, staker)**: [Tx `0x1662f...eead`](https://testnet.bscscan.com/tx/0x1662f33fac466cf9466d1817d7448f1ce7fe078d47054f4a36d693410a5eeead) (Block `140236018`)
+- **P1 Claim Creator Revenue (Developer)**: [Tx `0x52f36...cd99`](https://testnet.bscscan.com/tx/0x52f36807d1e785652cd91b2be6697f730a464992112a7cdfd004eb71b97ecd99) (Block `140236022`)
+- **P1 Claim Treasury Fee (Guardian/Treasury)**: [Tx `0xa7ee2...552e`](https://testnet.bscscan.com/tx/0xa7ee2a72a5f7db15c59d50d046ae17ba56978d6b3402ec9783c0dbd910a8552e) (Block `140236029`)
+- **P2 Pay Product (Zero-Staker Fallback, Buyer)**: [Tx `0x71afb...6cb6`](https://testnet.bscscan.com/tx/0x71afb055a6a16ccb82023cdbccb6ae90d4796a3d813af90e417bb7ab01846cb6) (Block `140236033`)
+
+#### Phase 6: Milestone Voting & Execution (`06-vote-execute.ts`)
+- **P1 Start Milestone 0 (Developer)**: [Tx `0x23283...189c`](https://testnet.bscscan.com/tx/0x23283686fd0308f683d1ab050406e9d2fb0a2575b93abcda408bc8ba9275189c) (Block `140236452`)
+- **P1 Sponsored VoteBySig Milestone 0 (Investor B via Relayer)**: [Tx `0x99503...db42`](https://testnet.bscscan.com/tx/0x99503f358b69a3dcc56ba44b62944da07102e177894f68ef5e2cf9250b38db42) (Block `140237304`)
+- **P1 Direct Vote Milestone 0 (Investor A)**: [Tx `0xac7e9...c455`](https://testnet.bscscan.com/tx/0xac7e903983bc758cad4b7834fcb9fa48f8c8fbd7a8f8b9431e638298aa14c455) (Block `140237309`)
+- **P1 Execute Milestone 0 (Sponsored Relayer)**: [Tx `0x90cfb...b40a`](https://testnet.bscscan.com/tx/0x90cfb318ca360284ce4aff6aec4b56102e3d4e395797aa0792034d02464bb40a) (Block `140237314`)
+- **P1 Start Milestone 1 (Developer)**: [Tx `0x8363d...c078`](https://testnet.bscscan.com/tx/0x8363da0ddda56c2aac33a68c8ac62c2aeeda76f50587cc04b40e15572efbc078) (Block `140237319`)
+- **P1 Direct Vote Against Milestone 1 (Investor B)**: [Tx `0x26bb7...7e42`](https://testnet.bscscan.com/tx/0x26bb79b8928a52fb564c9e0ae8e49e7d43502d4872e5957b8ad188fde7ad7e42) (Block `140237324`)
+- **P1 Direct Vote For Milestone 1 (Investor A)**: [Tx `0x1dc8d...355c`](https://testnet.bscscan.com/tx/0x1dc8d7d5877ffa811fe3ef8d22efcd6377847b3580dedb027550d1afce35355c) (Block `140237328`)
+- **P1 Freeze Milestones (Guardian)**: [Tx `0xa0205...e9c4`](https://testnet.bscscan.com/tx/0xa0205dada19fe7eb19d499d9c796a1b4b4fca33c51aa40a976e531a8284be9c4) (Block `140237333`)
+- **P1 Check Frozen Execution Revert**: Verified read-only staticCall reverted with `"Milestones frozen"`.
+- **P1 Unfreeze Milestones (Guardian)**: [Tx `0x9ab72...a296`](https://testnet.bscscan.com/tx/0x9ab72051b7ea50151220182a077355debbd65f9306ca0d79f37f8c26804da296) (Block `140237340`)
+- **P1 Execute Final Milestone 1 (Sponsored Relayer, Completes Project)**: [Tx `0x3fb7c...1a9a`](https://testnet.bscscan.com/tx/0x3fb7c9d9bcea126f426b823b8934e1d29f0680297a4c1165c8643fe8a2cf1a9a) (Block `140237352`)
+- **P1 Stake Withdrawal (Investor B)**: [Tx `0xd3315...476c`](https://testnet.bscscan.com/tx/0xd33158f48a7bf2c9f792e495590a472cb0d45ce796a943ed99998f5d30df476c) (Block `140237358`)
+
+#### Phase 7: Project Cancellation & Refunds (`07-cancel-refund.ts`)
+- **P2 Propose New Developer (Developer to Buyer)**: [Tx `0x68af4...3488`](https://testnet.bscscan.com/tx/0x68af4a3b70a158c9fda7bfdc354727490f0227e8aab5bd5695f107cb3a383488) (Block `140238169`)
+- **P2 Accept Developer Role (Buyer)**: [Tx `0x628bb...9e35`](https://testnet.bscscan.com/tx/0x628bbede0c53780da12dc0adfd5dc5533bfcee6a2c7ae3dfa7aa28fd82ec9e35) (Block `140238175`)
+- **P2 Claim Creator Funds (Buyer, as new developer)**: [Tx `0x96ccf...08e7`](https://testnet.bscscan.com/tx/0x96ccf6c47452ff9205223dd4e335e14ed4598a372808f6cafd9a39362bc708e7) (Block `140238181`)
+- **P2 Claim Treasury Funds (Guardian/Treasury)**: [Tx `0xc1687...0648`](https://testnet.bscscan.com/tx/0xc16877915e43f6714706d29e47e864177dc5a8659d44be2a9116be9740a30648) (Block `140238188`)
+- **P2 Cancel Project (Buyer, as new developer)**: [Tx `0x30c28...823e`](https://testnet.bscscan.com/tx/0x30c2811d66461f09e2d94905cf08dd6b6c9d7a0b46da5aabbe45ecd02a99823e) (Block `140238194`)
+- **P2 Approve Escrow for Token Pull (Investor B)**: [Tx `0xbefba...a9ea`](https://testnet.bscscan.com/tx/0xbefba9c22b7785683ed7715ff144c746d12fe8f907ac9b82c43b3bc94244a9ea) (Block `140238201`)
+- **P2 Refund Dead Project (Investor B)**: [Tx `0xf3c5d...8e03`](https://testnet.bscscan.com/tx/0xf3c5df77d542542de0aff83d627f5e27cc1685f1f35385fad5cb3911c22f8e03) (Block `140238207`)
+- **P2 Emergency Shutdown (Guardian)**: [Tx `0x85182...98d3`](https://testnet.bscscan.com/tx/0x8518252854e14ea093b6df13066b4c5a44f19fc523141da84d96214ed0c398d3) (Block `140238216`)
+
+#### Phase 9: Gas Debt Recovery (`09-gasdebt.ts`)
+- **P4 Launch (Developer)**: [Tx `0x98f4d...9dea`](https://testnet.bscscan.com/tx/0x98f4dc1ae38172a28bbc2a5066f7dfda853d83b4dca1b9778f9001e94d649dea) (Block `140238513`)
+- **P4 Deposit (Investor A, 0.0077 tBNB)**: [Tx `0xd5641...4a53`](https://testnet.bscscan.com/tx/0xd56417d9455cc8c9a6435f6044013773f4eae4ec87064662e7a361ee45fa4a53) (Block `140238520`)
+- **P4 Close Funding (Developer)**: [Tx `0xac9f1...75a9`](https://testnet.bscscan.com/tx/0xac9f1a0933df4e22d2b299ff9eef64b074eb3c978070696116b50a5b8f2a75a9) (Block `140238525`)
+- **P4 Claim Tokens (Sponsored Relayer for Investor A)**: [Tx `0x6e6d6...e139`](https://testnet.bscscan.com/tx/0x6e6d6a4bdf3a26749f79dba3c31f8e10c1b3b03e8dc69c8edde8d5040bbae139) (Block `140238531`)
+- **P4 Stake With Permit (Sponsored Relayer for Investor A)**: [Tx `0xbc7b8...4b31`](https://testnet.bscscan.com/tx/0xbc7b82d9a659b1999c73ea58b8d765447df12f307b024e67d8fed85dddbf4b31) (Block `140238539`)
+- **P4 Start Milestone 0 (Developer)**: [Tx `0xffaa7...1396`](https://testnet.bscscan.com/tx/0xffaa76353be2e7f8fc38bd8a9dff74d0d5265f42efae8bd517618ca852e21396) (Block `140238545`)
+- **P4 VoteBySig Milestone 0 (Sponsored Relayer for Investor A)**: [Tx `0x3cd15...40e0`](https://testnet.bscscan.com/tx/0x3cd15bdf91fe3177f1af82548251110fd82f62e0afedf5e96c3aba337bf340e0) (Block `140238552`)
+- **P4 Execute Milestone 0 (Sponsored Relayer)**: [Tx `0xee403...34cb`](https://testnet.bscscan.com/tx/0xee403aafa6e121bbc0f3904f9c02aa279a8288b8e073a041122e7d98d27534cb) (Block `140238557`)
+
+**P4 Gas Ledger Outcome (BSC Testnet)**:
+- Gas Budget: `0.000385 tBNB`
+- Actual Gas Spent: `0.000197329 tBNB`
+- Debt Recovered: `0.0 tBNB`
+- *Observation*: Real transaction execution costs on BSC Testnet were ~50% below the gas cap, staying within the 5% raise budget. As designed, when costs remain within budget, no debt overflow occurs and the developer receives 100% of their milestone payout.
+
+
+
+
+
+
+
+
+
 

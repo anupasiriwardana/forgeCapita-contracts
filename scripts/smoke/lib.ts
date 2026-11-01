@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+    FeeData,
     Signature,
     isError,
     type Interface,
@@ -177,6 +178,24 @@ export async function openConnection(): Promise<Connection> {
     const chainId = assertAllowedChain((await ethers.provider.getNetwork()).chainId);
     const chain = CHAINS[chainId];
     const checks: CheckResult[] = [pass("chain id", `${chainId} (${chain.name})`)];
+
+    if (chainId === 97) {
+        const BSC_MIN_TIP = 100_000_000n; // 1e8 wei (0.1 gwei) BSC testnet minimum priority fee
+        const originalGetFeeData = ethers.provider.getFeeData.bind(ethers.provider);
+        ethers.provider.getFeeData = async () => {
+            const fee = await originalGetFeeData();
+            let maxPriorityFeePerGas = fee.maxPriorityFeePerGas;
+            let maxFeePerGas = fee.maxFeePerGas;
+            if (maxPriorityFeePerGas !== null && maxPriorityFeePerGas < BSC_MIN_TIP) {
+                const diff = BSC_MIN_TIP - maxPriorityFeePerGas;
+                maxPriorityFeePerGas = BSC_MIN_TIP;
+                if (maxFeePerGas !== null) {
+                    maxFeePerGas = maxFeePerGas + diff;
+                }
+            }
+            return new FeeData(fee.gasPrice, maxFeePerGas, maxPriorityFeePerGas);
+        };
+    }
 
     const signerList = await ethers.getSigners();
     let addresses: Record<Role, string>;
