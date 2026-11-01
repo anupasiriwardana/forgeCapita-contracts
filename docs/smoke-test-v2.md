@@ -16,10 +16,10 @@ The scripts use the six accounts of the smoke network in this order:
 | Signer | Role | Address |
 |---|---|---|
 | 0 | Guardian = deployer = treasury | `0x08D3B18508ca976fECc7291c06c30ae15133eB4F` |
-| 1 | developer (launches the projects) | new throwaway wallet |
-| 2 | investor A | new throwaway wallet |
-| 3 | investor B | new throwaway wallet |
-| 4 | buyer (P2P buyer, revenue payer, later P2 developer) | new throwaway wallet |
+| 1 | developer (launches the projects) | `0xDB9C736d60e1773037d6c2232C73FC9f39d3d467` |
+| 2 | investor A | `0x968Ee2C766252a096e6b50eCA69b7d658d5E66DE` |
+| 3 | investor B | `0xB3feCEEDB8BEe98F5ee16189A670F1dd23E753D5` |
+| 4 | buyer (P2P buyer, revenue payer, later P2 developer) | `0x6CA6098Fc69A9d44Cfa79ad6BBa033F5B61a1219` |
 | 5 | relayer | `0x8a1Be9d8fd97658b6b0B8b537374FF6c3E41815b` |
 
 Public contract addresses (same on both chains, see `docs/deployments-v2.md`): Factory `0x246Ffa3Bf583a15e92e17FAa32d3663C17204d52`, P2PExchange `0xd2540297eB8FC0985b5fa26cba2358db0a0AE914`, Registry `0x2e6A22fd249930b9F2905D1bD66443CbE366AacB`.

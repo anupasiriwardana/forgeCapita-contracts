@@ -734,7 +734,7 @@ async function developerTokens(ctx: SmokeContext): Promise<string[]> {
         try {
             tokens.push(await factory.developerProjects(ctx.addresses.developer, index));
         } catch (error) {
-            if (isError(error, "CALL_EXCEPTION")) return tokens;
+            if (isError(error, "CALL_EXCEPTION") || sanitizeError(error).includes("revert")) return tokens;
             throw error;
         }
     }

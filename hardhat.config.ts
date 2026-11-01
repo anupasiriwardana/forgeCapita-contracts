@@ -46,6 +46,32 @@ export default defineConfig({
       accounts: [configVariable("DEPLOYER_KEY")],
       chainId: 97,
     },
+    arbitrumSepoliaSmoke: {
+      type: "http",
+      url: process.env.ARBITRUM_SEPOLIA_RPC || "",
+      chainId: 421614,
+      accounts: [
+        configVariable("DEPLOYER_KEY"),
+        configVariable("SMOKE_DEVELOPER_KEY"),
+        configVariable("SMOKE_INVESTOR_A_KEY"),
+        configVariable("SMOKE_INVESTOR_B_KEY"),
+        configVariable("SMOKE_BUYER_KEY"),
+        configVariable("RELAYER_KEY"),
+      ],
+    },
+    bscTestnetSmoke: {
+      type: "http",
+      url: process.env.BSC_TESTNET_RPC || "https://data-seed-prebsc-1-s1.binance.org:8545",
+      chainId: 97,
+      accounts: [
+        configVariable("DEPLOYER_KEY"),
+        configVariable("SMOKE_DEVELOPER_KEY"),
+        configVariable("SMOKE_INVESTOR_A_KEY"),
+        configVariable("SMOKE_INVESTOR_B_KEY"),
+        configVariable("SMOKE_BUYER_KEY"),
+        configVariable("RELAYER_KEY"),
+      ],
+    },
   },
   verify: {
     etherscan: {
