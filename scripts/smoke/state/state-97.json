@@ -297,6 +297,11 @@
           "done": true,
           "txHash": "0x834ae3b189747dbdc4259a4eeb84e99b5eda2a551a4f1f0bdec4e2c055f34a04",
           "block": 140234984
+        },
+        "refund:investorB": {
+          "done": true,
+          "txHash": "0xf3bf58cfa60f3197066471b1f52be92e352ec8f4b0f2dc66e697659f620afa8c",
+          "block": 140631363
         }
       },
       "data": {}

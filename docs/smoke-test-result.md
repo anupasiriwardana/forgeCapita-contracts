@@ -73,7 +73,7 @@ In [`scripts/smoke/lib.ts`](file:///d:/GitHub/forgeCapita/forgecapita-contracts/
 | **05** | `05-revenue.ts` | P1, P2 | ✅ **PASSED** | Product sales split (1% fee, 24% dev, 75% stakers) and 0-staker fallback. |
 | **06** | `06-vote-execute.ts` | P1 | ✅ **PASSED** | EIP-712 `voteBySig`, guardian freeze/unfreeze, completion & vesting. |
 | **07** | `07-cancel-refund.ts` | P2 | ✅ **PASSED** | Dev role handover, cancellation, dead refund, and emergency shutdown. |
-| **08** | `08-failed-crowdfund.ts` | P3 | ⏳ **WAITING** | Funding deadline passes in ~23h (expected protocol delay). |
+| **08** | `08-failed-crowdfund.ts` | P3 | ✅ **PASSED** | Deadline reached; investor B refund verified. |
 | **09** | `09-gasdebt.ts` | P4 | ✅ **PASSED** | Tight gas budget overflow; `GasDebtRecovered` event confirmed. |
 
 ---
@@ -151,7 +151,8 @@ In [`scripts/smoke/lib.ts`](file:///d:/GitHub/forgeCapita/forgecapita-contracts/
 - **P2 Emergency Shutdown (Guardian)**: [Tx `0xfcded...bebb`](https://sepolia.arbiscan.io/tx/0xfcded98f159d387e1e4450b5c511d5ccd7308c60c255342c1b74b5cffe8dbebb) (Block `325058344`)
 
 #### Phase 8: Failed Crowdfund (`08-failed-crowdfund.ts`)
-- **Status**: ⏳ Waiting on on-chain duration. Funding deadline passes ~24 hours after block `325053167`. Execution will be run once deadline timestamp is reached.
+- **P3 Failed Crowdfund Refund (Investor B)**: [Tx `0x02ed9...8e03`](https://sepolia.arbiscan.io/tx/0x02ed9c07e3759d1a52cfbbdb6e045036cec4dd1d2481221a23c9742b9c5c8e03) (Block `325741851`)
+
 
 #### Phase 9: Gas Debt & Overflow (`09-gasdebt.ts`)
 - **P4 Launch**: [Tx `0xddce5...3b1a`](https://sepolia.arbiscan.io/tx/0xddce589b95c57ec335ce41631fd3badb5d24ed5e5d415fb9b72ef7fecb543b1a) (Block `325060241`)
@@ -197,7 +198,7 @@ In [`scripts/smoke/lib.ts`](file:///d:/GitHub/forgeCapita/forgecapita-contracts/
 | **05** | `05-revenue.ts` | P1, P2 | ✅ **PASSED** | Product sales split (1% fee, 24% dev, 75% stakers) and 0-staker fallback. |
 | **06** | `06-vote-execute.ts` | P1 | ✅ **PASSED** | EIP-712 `voteBySig`, guardian freeze/unfreeze, completion & vesting. |
 | **07** | `07-cancel-refund.ts` | P2 | ✅ **PASSED** | Dev role handover, cancellation, dead refund, and emergency shutdown. |
-| **08** | `08-failed-crowdfund.ts` | P3 | ⏳ *Pending* | (Requires 24h wait after Phase 01: ~2026-11-02 22:45 UTC+5:30) |
+| **08** | `08-failed-crowdfund.ts` | P3 | ✅ **PASSED** | Deadline reached; investor B refund verified. |
 | **09** | `09-gasdebt.ts` | P4 | ✅ **PASSED** | Relayer-sponsored actions executed; booked gas within budget (no debt). |
 
 ---
@@ -273,6 +274,9 @@ In [`scripts/smoke/lib.ts`](file:///d:/GitHub/forgeCapita/forgecapita-contracts/
 - **P2 Approve Escrow for Token Pull (Investor B)**: [Tx `0xbefba...a9ea`](https://testnet.bscscan.com/tx/0xbefba9c22b7785683ed7715ff144c746d12fe8f907ac9b82c43b3bc94244a9ea) (Block `140238201`)
 - **P2 Refund Dead Project (Investor B)**: [Tx `0xf3c5d...8e03`](https://testnet.bscscan.com/tx/0xf3c5df77d542542de0aff83d627f5e27cc1685f1f35385fad5cb3911c22f8e03) (Block `140238207`)
 - **P2 Emergency Shutdown (Guardian)**: [Tx `0x85182...98d3`](https://testnet.bscscan.com/tx/0x8518252854e14ea093b6df13066b4c5a44f19fc523141da84d96214ed0c398d3) (Block `140238216`)
+
+#### Phase 8: Failed Crowdfund (`08-failed-crowdfund.ts`)
+- **P3 Failed Crowdfund Refund (Investor B)**: [Tx `0xf3bf5...fa8c`](https://testnet.bscscan.com/tx/0xf3bf58cfa60f3197066471b1f52be92e352ec8f4b0f2dc66e697659f620afa8c) (Block `140631363`)
 
 #### Phase 9: Gas Debt Recovery (`09-gasdebt.ts`)
 - **P4 Launch (Developer)**: [Tx `0x98f4d...9dea`](https://testnet.bscscan.com/tx/0x98f4dc1ae38172a28bbc2a5066f7dfda853d83b4dca1b9778f9001e94d649dea) (Block `140238513`)
