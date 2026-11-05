@@ -2,10 +2,14 @@
 
 **Service:** `forgecapita-contracts` (Solidity / Hardhat 3, OpenZeppelin clones)
 **Networks:** Arbitrum Sepolia (`421614`) and BSC Testnet (`97`)
-**Last Updated:** 2026-11-02 (smoke test run by the user, user-reported)
+**Last Updated:** 2026-11-05 (smoke phase 08 passed on both chains, user-reported)
 **Location of this file:** moved here from the workspace root on 2026-10-28.
 
-**Current focus:** Step: WS-05.4 (smoke test run by the user on both testnets: phases 00-07 and 09 PASSED, phase 08 waiting for the funding window; user-reported) | State: idle (no step started; user must run `08-failed-crowdfund.ts` later) | Updated: 2026-11-02
+**Current focus:** Step: WS-05.4 (smoke test run by the user on both testnets: ALL phases 00-09 PASSED on both chains; user-reported; waiting only for the indexer comparison IDX-41 Phase B, blocked by IDX-55) | State: idle (no step started) | Updated: 2026-11-05
+
+## Status 2026-11-05: smoke phase 08 PASSED on both chains (USER-REPORTED, not verified on-chain by Claude)
+The user reported phase 08 (`08-failed-crowdfund.ts`, P3 failed crowdfund refund for investor B) complete on both chains; recorded in `docs/smoke-test-result.md` (read): Arbitrum Sepolia refund tx `0x02ed9...8e03` at block 325741851; BSC Testnet refund tx `0xf3bf5...fa8c` at block 140631363. All smoke phases 00-09 have now run on both chains. CON-04.6b and CON-04.6c ticked. CON-04.6 and WS-05.4 stay OPEN until the indexer comparison (IDX-41 Phase B) is done; that is blocked by IDX-55 (indexer crash on historical `readContract` with the public non-archive RPC). Blocks 325741851 (Arbitrum) and 140631363 (BSC) are the latest events the indexer must eventually process. `refundFailedCrowdfund` emits no event, so the indexer keeps P3 as FUNDING with `deposit.refunded=0` by design (IDX-12). No source changed; the tx hashes and blocks were not checked on the explorers by Claude.
+Next suggested: WS-02.9 / IDX-55 (indexer hardening) plus the user's archive-capable RPC action, then IDX-41 Phase B.
 
 ## Status 2026-11-02: smoke test RUN by the user (USER-REPORTED, not verified on-chain by Claude)
 The user reviewed and committed the WS-05.4a scripts and ran them on Arbitrum Sepolia (421614) and BSC Testnet (97); results and tx hashes are in `docs/smoke-test-result.md` (read fully). Phases 00-07 and 09 PASSED on both chains; phase 08 (P3, failed crowdfund refund) is WAITING for the more-than-24h funding window (Arbitrum about 2026-11-02, BSC about 2026-11-02 22:45 UTC+5:30). P4 gas debt: Arbitrum recovered 0.000032988481968542 ETH via `GasDebtRecovered` (budget 0.00022, spent 0.000252988...); BSC no overflow (budget 0.000385, spent 0.000197329). Launch blocks: Arbitrum P1 325053149, P2 325053158, P3 325053167, P4 325060241; BSC P1 140234526, P2 140234532, P3 140234544, P4 140238513.
@@ -356,6 +360,7 @@ Verified by running `npm test` (`hardhat test`): **144 passing, 2 failing** (146
 ---
 
 ## Change log
+2026-11-05  WS-05.4 / CON-04.6b, CON-04.6c (docs only)  Recorded smoke phase 08 (P3 failed crowdfund refund) PASSED on both chains (Arbitrum block 325741851, BSC block 140631363); CON-04.6b and CON-04.6c ticked; CON-04.6 and WS-05.4 stay open for the indexer comparison (IDX-41 Phase B, blocked by IDX-55)  - verified by: read `docs/smoke-test-result.md`; on-chain results are user-reported, not verified
 2026-11-02  WS-05.4 / CON-04.6b (docs only)  Recorded the user-run smoke tests: both chains phases 00-07 and 09 PASSED, phase 08 waiting; P4 recovery on Arbitrum, none on BSC; two `lib.ts` fixes (revert-message end-of-list, BSC 0.1 gwei tip clamp) verified; CON-04.6b done except phase 08 (unticked), CON-04.6 open, new CON-04.6c; clone addresses identical across chains noted  - verified by: read `docs/smoke-test-result.md` and `scripts/smoke/lib.ts`; `npx hardhat test` 442 passing; `npx tsc --noEmit` filtered (clean); on-chain results are user-reported, not verified
 2026-11-01  WS-05.4a follow-up  Smoke scripts: pending-tx recovery, 06 withdraw needs pay, treasury == Guardian check (00/05/07), P4 raise minimum 21 caps, funding-window time left, 4.235 caps wording; earlier findings 1 to 8 resolved, 5 new minor findings; scripts NOT RUN; CON-04.6 and IDX-41 Phase B open  - verified by: read all changed smoke files, test and doc; `npx hardhat compile`; `npx hardhat test` 442 passing; `npx tsc --noEmit` filtered (clean); greps for env/keys/admin calls/headers/whitelist; `git status` (only the new paths)
 2026-11-01  WS-05.4a  Smoke-test scripts and doc written (`scripts/smoke/`, `docs/smoke-test-v2.md`, `test/SmokeLib.ts`); CON-04.6a ticked, CON-04.6 and new CON-04.6b (USER-ACTION) open; scripts NOT RUN; 9 minor findings recorded  - verified by: read all scripts, doc and six contracts; `npx hardhat compile`; `npx hardhat test` 430 passing; `npx tsc --noEmit` filtered to the new files (clean); greps for env/keys/admin calls/headers; `git status` (only new paths); numbers recomputed by hand
